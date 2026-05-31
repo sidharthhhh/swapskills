@@ -152,21 +152,19 @@ export async function handleMatchRequestAction(
 export async function getActiveMatches(userId: number) {
   const matches = await matchingModel.getActiveMatchesForUser(userId);
 
-  return matches.map((m) => ({
-    id: m.id,
-    userAId: m.user_a_id,
-    userBId: m.user_b_id,
-    userAUsername: m.user_a_username,
-    userBUsername: m.user_b_username,
-    skillATeachesB: m.skill_a_teaches_b,
-    skillBTeachesA: m.skill_b_teaches_a,
-    skillAName: m.skill_a_name,
-    skillBName: m.skill_b_name,
-    status: m.status,
-    sessionsA: m.sessions_a,
-    sessionsB: m.sessions_b,
-    createdAt: m.created_at,
-  }));
+  return matches.map((m) => {
+    const isUserA = m.user_a_id === userId;
+
+    return {
+      id: m.id,
+      partnerUsername: isUserA ? m.user_b_username : m.user_a_username,
+      teachSkillName: isUserA ? m.skill_a_name : m.skill_b_name,
+      learnSkillName: isUserA ? m.skill_b_name : m.skill_a_name,
+      status: m.status,
+      chatRoomId: m.chat_room_id,
+      createdAt: m.created_at,
+    };
+  });
 }
 
 /**

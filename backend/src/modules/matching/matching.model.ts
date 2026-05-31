@@ -47,6 +47,7 @@ export interface MatchRow extends RowDataPacket {
   user_b_username: string;
   skill_a_name: string;
   skill_b_name: string;
+  chat_room_id: number;
 }
 
 export interface EndorsementRow extends RowDataPacket {
@@ -239,12 +240,14 @@ export async function getActiveMatchesForUser(userId: number): Promise<MatchRow[
        ua.username AS user_a_username,
        ub.username AS user_b_username,
        s1.name AS skill_a_name,
-       s2.name AS skill_b_name
+       s2.name AS skill_b_name,
+       cr.id AS chat_room_id
      FROM matches m
      JOIN users ua ON ua.id = m.user_a_id
      JOIN users ub ON ub.id = m.user_b_id
      JOIN skills s1 ON s1.id = m.skill_a_teaches_b
      JOIN skills s2 ON s2.id = m.skill_b_teaches_a
+     LEFT JOIN chat_rooms cr ON cr.match_id = m.id
      WHERE (m.user_a_id = ? OR m.user_b_id = ?) AND m.status = 'active'
      ORDER BY m.created_at DESC`,
     [userId, userId]
