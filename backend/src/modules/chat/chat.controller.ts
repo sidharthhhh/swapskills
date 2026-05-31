@@ -99,6 +99,12 @@ export async function sendMessage(req: Request, res: Response, next: NextFunctio
       fileSize ? parseInt(fileSize, 10) : null
     );
 
+    // Broadcast via Socket.IO
+    const io = req.app.get('io');
+    if (io) {
+      io.of('/chat').to(`room:${roomId}`).emit('new_message', message);
+    }
+
     res.status(201).json({ success: true, data: message });
   } catch (err) {
     next(err);

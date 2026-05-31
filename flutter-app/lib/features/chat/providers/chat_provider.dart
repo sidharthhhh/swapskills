@@ -472,7 +472,7 @@ class ChatMessagesNotifier extends StateNotifier<ChatMessagesState> {
     } catch (_) {
       // Fallback: try socket
       final socketService = _ref.read(socketServiceProvider);
-      socketService.sendMessage(roomId, content, contentType, language);
+      socketService.sendMessage(roomId, content, contentType, language, replyToId, fileUrl, fileName, fileSize);
     }
   }
 

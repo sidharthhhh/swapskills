@@ -124,15 +124,22 @@ class SocketService {
     String content,
     String contentType, [
     String? language,
+    String? replyToId,
+    String? fileUrl,
+    String? fileName,
+    int? fileSize,
   ]) {
     final data = <String, dynamic>{
       'roomId': roomId,
       'content': content,
       'contentType': contentType,
     };
-    if (language != null) {
-      data['language'] = language;
-    }
+    if (language != null) data['language'] = language;
+    if (replyToId != null) data['replyToId'] = replyToId;
+    if (fileUrl != null) data['fileUrl'] = fileUrl;
+    if (fileName != null) data['fileName'] = fileName;
+    if (fileSize != null) data['fileSize'] = fileSize;
+    
     _socket?.emit('send_message', data);
   }
 

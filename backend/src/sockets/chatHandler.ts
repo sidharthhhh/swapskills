@@ -117,7 +117,7 @@ export function registerChatHandler(io: Server): void {
 
     socket.on(
       'send_message',
-      async (data: { roomId: number; content: string; contentType?: 'text' | 'code'; language?: string }) => {
+      async (data: { roomId: number; content: string; contentType?: 'text' | 'code' | 'image' | 'file'; language?: string; replyToId?: number; fileUrl?: string; fileName?: string; fileSize?: number }) => {
         try {
           // Rate limit check
           const allowed = await checkSocketRateLimit(userId);
@@ -126,7 +126,7 @@ export function registerChatHandler(io: Server): void {
             return;
           }
 
-          const { roomId, content, contentType, language } = data;
+          const { roomId, content, contentType, language, replyToId, fileUrl, fileName, fileSize } = data;
 
           if (!roomId || typeof roomId !== 'number') {
             socket.emit('error', { code: 'INVALID_INPUT', message: 'Invalid room ID' });
@@ -147,7 +147,11 @@ export function registerChatHandler(io: Server): void {
             userId,
             content,
             contentType || 'text',
-            language || null
+            language || null,
+            replyToId || null,
+            fileUrl || null,
+            fileName || null,
+            fileSize || null
           );
 
           // Broadcast to all users in the room (including sender)
