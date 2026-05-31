@@ -1,0 +1,19 @@
+CREATE TABLE chat_rooms (
+  id INT UNSIGNED AUTO_INCREMENT PRIMARY KEY,
+  match_id INT UNSIGNED UNIQUE NOT NULL,
+  created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+  FOREIGN KEY (match_id) REFERENCES matches(id)
+);
+
+CREATE TABLE messages (
+  id INT UNSIGNED AUTO_INCREMENT PRIMARY KEY,
+  room_id INT UNSIGNED NOT NULL,
+  sender_id INT UNSIGNED NOT NULL,
+  content TEXT NOT NULL,
+  content_type ENUM('text','code') DEFAULT 'text',
+  language VARCHAR(32) NULL,
+  read_at DATETIME NULL,
+  created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+  FOREIGN KEY (room_id) REFERENCES chat_rooms(id),
+  FOREIGN KEY (sender_id) REFERENCES users(id)
+);

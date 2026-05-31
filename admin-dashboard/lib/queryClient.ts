@@ -1,0 +1,21 @@
+'use client';
+
+import { QueryClient } from '@tanstack/react-query';
+
+let queryClient: QueryClient | undefined;
+
+export function getQueryClient(): QueryClient {
+  if (!queryClient) {
+    queryClient = new QueryClient({
+      defaultOptions: {
+        queries: {
+          staleTime: 60 * 1000, // 60 seconds
+          refetchInterval: 60 * 1000, // 60 seconds
+          refetchOnWindowFocus: false,
+          retry: 1,
+        },
+      },
+    });
+  }
+  return queryClient;
+}

@@ -1,0 +1,2 @@
+DROP TABLE IF EXISTS session_notes;
+DROP TABLE IF EXISTS sessions;
