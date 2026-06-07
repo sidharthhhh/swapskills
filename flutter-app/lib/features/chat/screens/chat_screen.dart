@@ -8,6 +8,9 @@ import '../providers/chat_provider.dart';
 import '../../auth/providers/auth_provider.dart';
 import '../../../services/api_service.dart';
 import '../../../services/socket_service.dart';
+import 'package:swipe_to/swipe_to.dart';
+import 'package:flutter_linkify/flutter_linkify.dart';
+import 'package:url_launcher/url_launcher.dart';
 
 /// Real-time chat screen for a specific room.
 /// Features: message list with read states, typing indicator,
@@ -432,16 +435,19 @@ class _ChatScreenState extends ConsumerState<ChatScreen> {
         final message = state.messages[msgIndex];
         return GestureDetector(
           onLongPress: () => _showMessageOptions(message),
-          child: _MessageBubble(
-            message: message,
-            isMe: _isCurrentUser(message.senderId),
-            roomId: widget.roomId,
-            onReactionTap: (emoji) {
-              // Toggle reaction: if user already reacted, remove; otherwise add
-              ref
-                  .read(chatMessagesProvider(widget.roomId).notifier)
-                  .addReaction(message.id, emoji);
-            },
+          child: SwipeTo(
+            onRightSwipe: (details) => _startReply(message),
+            child: _MessageBubble(
+              message: message,
+              isMe: _isCurrentUser(message.senderId),
+              roomId: widget.roomId,
+              onReactionTap: (emoji) {
+                // Toggle reaction: if user already reacted, remove; otherwise add
+                ref
+                    .read(chatMessagesProvider(widget.roomId).notifier)
+                    .addReaction(message.id, emoji);
+              },
+            ),
           ),
         );
       },
@@ -536,18 +542,18 @@ class _ChatScreenState extends ConsumerState<ChatScreen> {
 
     return Container(
       padding: EdgeInsets.only(
-        left: 8,
-        right: 8,
-        top: 8,
-        bottom: MediaQuery.of(context).padding.bottom + 8,
+        left: 12,
+        right: 12,
+        top: 12,
+        bottom: MediaQuery.of(context).padding.bottom + 12,
       ),
       decoration: BoxDecoration(
         color: theme.colorScheme.surface,
         boxShadow: [
           BoxShadow(
-            color: Colors.black.withValues(alpha: 0.05),
-            blurRadius: 4,
-            offset: const Offset(0, -2),
+            color: Colors.black.withOpacity(0.04),
+            blurRadius: 10,
+            offset: const Offset(0, -4),
           ),
         ],
       ),
@@ -557,10 +563,10 @@ class _ChatScreenState extends ConsumerState<ChatScreen> {
           // Code mode toggle
           IconButton(
             icon: Icon(
-              Icons.code,
+              Icons.code_rounded,
               color: _isCodeMode
                   ? theme.colorScheme.primary
-                  : theme.colorScheme.onSurfaceVariant,
+                  : theme.colorScheme.onSurfaceVariant.withOpacity(0.7),
             ),
             onPressed: _toggleCodeMode,
             tooltip: 'Toggle code mode',
@@ -568,48 +574,85 @@ class _ChatScreenState extends ConsumerState<ChatScreen> {
           // File attachment button
           IconButton(
             icon: Icon(
-              Icons.attach_file,
-              color: theme.colorScheme.onSurfaceVariant,
+              Icons.attach_file_rounded,
+              color: theme.colorScheme.onSurfaceVariant.withOpacity(0.7),
             ),
             onPressed: _onAttachFile,
             tooltip: 'Attach file',
           ),
           // Text input
           Expanded(
-            child: TextField(
-              controller: _messageController,
-              onChanged: _onTextChanged,
-              maxLines: _isCodeMode ? 6 : 4,
-              minLines: 1,
-              textInputAction:
-                  _isCodeMode ? TextInputAction.newline : TextInputAction.send,
-              onSubmitted: _isCodeMode ? null : (_) => _sendMessage(),
-              decoration: InputDecoration(
-                hintText: _isCodeMode ? 'Paste code here...' : 'Type a message...',
-                border: OutlineInputBorder(
-                  borderRadius: BorderRadius.circular(24),
-                  borderSide: BorderSide.none,
-                ),
-                filled: true,
-                fillColor: theme.colorScheme.surfaceContainerHighest,
-                contentPadding: const EdgeInsets.symmetric(
-                  horizontal: 16,
-                  vertical: 10,
+            child: Container(
+              margin: const EdgeInsets.symmetric(horizontal: 4),
+              decoration: BoxDecoration(
+                color: theme.colorScheme.surfaceContainerHighest.withOpacity(0.6),
+                borderRadius: BorderRadius.circular(24),
+                border: Border.all(
+                  color: theme.colorScheme.outlineVariant.withOpacity(0.5),
+                  width: 1,
                 ),
               ),
-              style: _isCodeMode
-                  ? theme.textTheme.bodyMedium?.copyWith(
-                      fontFamily: 'monospace',
-                    )
-                  : null,
+              child: Row(
+                crossAxisAlignment: CrossAxisAlignment.end,
+                children: [
+                  Expanded(
+                    child: TextField(
+                      controller: _messageController,
+                      onChanged: _onTextChanged,
+                      maxLines: _isCodeMode ? 6 : 4,
+                      minLines: 1,
+                      textInputAction: _isCodeMode
+                          ? TextInputAction.newline
+                          : TextInputAction.send,
+                      onSubmitted: _isCodeMode ? null : (_) => _sendMessage(),
+                      decoration: InputDecoration(
+                        hintText: _isCodeMode ? 'Paste code here...' : 'Message',
+                        hintStyle: theme.textTheme.bodyMedium?.copyWith(
+                          color: theme.colorScheme.onSurfaceVariant.withOpacity(0.6),
+                        ),
+                        border: InputBorder.none,
+                        contentPadding: const EdgeInsets.symmetric(
+                          horizontal: 16,
+                          vertical: 12,
+                        ),
+                      ),
+                      style: _isCodeMode
+                          ? theme.textTheme.bodyMedium?.copyWith(
+                              fontFamily: 'monospace',
+                            )
+                          : null,
+                    ),
+                  ),
+                ],
+              ),
             ),
           ),
           const SizedBox(width: 4),
           // Send button
-          IconButton.filled(
-            icon: const Icon(Icons.send),
-            onPressed: _sendMessage,
-            tooltip: 'Send message',
+          Container(
+            decoration: BoxDecoration(
+              gradient: LinearGradient(
+                colors: [
+                  theme.colorScheme.primary,
+                  theme.colorScheme.secondary,
+                ],
+                begin: Alignment.topLeft,
+                end: Alignment.bottomRight,
+              ),
+              shape: BoxShape.circle,
+              boxShadow: [
+                BoxShadow(
+                  color: theme.colorScheme.primary.withOpacity(0.3),
+                  blurRadius: 8,
+                  offset: const Offset(0, 4),
+                ),
+              ],
+            ),
+            child: IconButton(
+              icon: const Icon(Icons.send_rounded, color: Colors.white, size: 20),
+              onPressed: _sendMessage,
+              tooltip: 'Send message',
+            ),
           ),
         ],
       ),
@@ -635,14 +678,27 @@ class _MessageBubble extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
+    final colorScheme = theme.colorScheme;
+    
+    // Create gradient for sent messages
+    final messageGradient = isMe
+        ? LinearGradient(
+            colors: [
+              colorScheme.primary,
+              colorScheme.secondary,
+            ],
+            begin: Alignment.topLeft,
+            end: Alignment.bottomRight,
+          )
+        : null;
 
     return Align(
       alignment: isMe ? Alignment.centerRight : Alignment.centerLeft,
       child: Container(
         constraints: BoxConstraints(
-          maxWidth: MediaQuery.of(context).size.width * 0.75,
+          maxWidth: MediaQuery.of(context).size.width * 0.78,
         ),
-        margin: const EdgeInsets.symmetric(vertical: 4),
+        margin: const EdgeInsets.symmetric(vertical: 6),
         child: Column(
           crossAxisAlignment:
               isMe ? CrossAxisAlignment.end : CrossAxisAlignment.start,
@@ -651,17 +707,23 @@ class _MessageBubble extends StatelessWidget {
             Container(
               padding: message.contentType == 'code'
                   ? const EdgeInsets.all(4)
-                  : const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
+                  : const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
               decoration: BoxDecoration(
-                color: isMe
-                    ? theme.colorScheme.primary
-                    : theme.colorScheme.surfaceContainerHighest,
+                gradient: messageGradient,
+                color: isMe ? null : theme.colorScheme.surfaceContainerHighest.withOpacity(0.7),
                 borderRadius: BorderRadius.only(
-                  topLeft: const Radius.circular(16),
-                  topRight: const Radius.circular(16),
-                  bottomLeft: isMe ? const Radius.circular(16) : Radius.zero,
-                  bottomRight: isMe ? Radius.zero : const Radius.circular(16),
+                  topLeft: const Radius.circular(20),
+                  topRight: const Radius.circular(20),
+                  bottomLeft: isMe ? const Radius.circular(20) : const Radius.circular(4),
+                  bottomRight: isMe ? const Radius.circular(4) : const Radius.circular(20),
                 ),
+                boxShadow: [
+                  BoxShadow(
+                    color: Colors.black.withOpacity(0.04),
+                    blurRadius: 4,
+                    offset: const Offset(0, 2),
+                  ),
+                ],
               ),
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
@@ -688,21 +750,20 @@ class _MessageBubble extends StatelessWidget {
                         style: theme.textTheme.labelSmall?.copyWith(
                           color: isMe
                               ? theme.colorScheme.onPrimary
-                                  .withValues(alpha: 0.7)
-                              : theme.colorScheme.onSurfaceVariant,
+                                  .withOpacity(0.8)
+                              : theme.colorScheme.onSurfaceVariant.withOpacity(0.8),
+                          fontSize: 10,
+                          fontWeight: FontWeight.w500,
                         ),
                       ),
                       if (isMe) ...[
                         const SizedBox(width: 4),
                         Icon(
-                          message.isRead ? Icons.done_all : Icons.done,
+                          message.isRead ? Icons.done_all_rounded : Icons.done_rounded,
                           size: 14,
                           color: message.isRead
-                              ? Colors.lightBlueAccent
-                              : (isMe
-                                  ? theme.colorScheme.onPrimary
-                                      .withValues(alpha: 0.7)
-                                  : theme.colorScheme.onSurfaceVariant),
+                              ? Colors.white
+                              : theme.colorScheme.onPrimary.withOpacity(0.6),
                         ),
                       ],
                     ],
@@ -887,13 +948,24 @@ class _MessageBubble extends StatelessWidget {
 
   Widget _buildTextContent(BuildContext context) {
     final theme = Theme.of(context);
-    return Text(
-      message.content,
+    return Linkify(
+      onOpen: (link) async {
+        final uri = Uri.parse(link.url);
+        if (await canLaunchUrl(uri)) {
+          await launchUrl(uri);
+        }
+      },
+      text: message.content,
       style: theme.textTheme.bodyMedium?.copyWith(
         color: isMe
             ? theme.colorScheme.onPrimary
             : theme.colorScheme.onSurface,
       ),
+      linkStyle: theme.textTheme.bodyMedium?.copyWith(
+        color: isMe ? Colors.white : theme.colorScheme.primary,
+        decoration: TextDecoration.underline,
+      ),
+      options: const LinkifyOptions(humanize: false),
     );
   }
 

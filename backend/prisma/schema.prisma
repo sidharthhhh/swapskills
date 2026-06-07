@@ -1,0 +1,352 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+}
+
+model User {
+  id                    Int       @id @default(autoincrement())
+  uid                   String    @unique @db.VarChar(16)
+  username              String    @unique @db.VarChar(64)
+  email                 String?   @unique @db.VarChar(255)
+  password_hash         String    @db.VarChar(255)
+  status                String    @default("active")
+  is_verified           Boolean   @default(false)
+  profile_picture_url   String?   @db.VarChar(500)
+  bio                   String?   @db.Text
+  experience_level      String    @default("beginner")
+  availability          String    @default("flexible")
+  trust_score           Decimal   @default(100.0) @db.Decimal(8,2)
+  cooldown_until        DateTime?
+  location_lat          Decimal?  @db.Decimal(10,8)
+  location_lng          Decimal?  @db.Decimal(11,8)
+  created_at            DateTime  @default(now())
+  updated_at            DateTime  @default(now()) @updatedAt
+
+  recoveryKeys          RecoveryKey[]
+  refreshTokens         RefreshToken[]
+  teachSkills           UserTeachSkill[]
+  learnSkills           UserLearnSkill[]
+  sentRequests          MatchRequest[] @relation("SentMatchRequests")
+  receivedRequests      MatchRequest[] @relation("ReceivedMatchRequests")
+  matchesAsA            Match[] @relation("UserAMatches")
+  matchesAsB            Match[] @relation("UserBMatches")
+  endorsementsGiven     SkillEndorsement[] @relation("EndorsementsGiven")
+  endorsementsReceived  SkillEndorsement[] @relation("EndorsementsReceived")
+  sessionsAsTeacher     Session[] @relation("TeacherSessions")
+  sessionsAsLearner     Session[] @relation("LearnerSessions")
+  sessionNotes          SessionNote[]
+  messages              Message[]
+  messageReactions      MessageReaction[]
+  posts                 Post[]
+  comments              Comment[]
+  postVotes             PostVote[]
+  reportsFiled          Report[] @relation("ReportsFiled")
+  blocksAsBlocker       Block[] @relation("BlocksAsBlocker")
+  blocksAsBlocked       Block[] @relation("BlocksAsBlocked")
+  reputationEvents      ReputationEvent[]
+  notifications         Notification[]
+  deviceTokens          DeviceToken[]
+}
+
+model RecoveryKey {
+  id          Int      @id @default(autoincrement())
+  user_id     Int
+  key_hash    String   @unique @db.VarChar(255)
+  is_active   Boolean  @default(true)
+  created_at  DateTime @default(now())
+
+  user        User     @relation(fields: [user_id], references: [id], onDelete: Cascade)
+}
+
+model RefreshToken {
+  id          Int      @id @default(autoincrement())
+  user_id     Int
+  token       String   @unique @db.VarChar(500)
+  expires_at  DateTime
+  created_at  DateTime @default(now())
+
+  user        User     @relation(fields: [user_id], references: [id], onDelete: Cascade)
+}
+
+model Skill {
+  id          Int      @id @default(autoincrement())
+  name        String   @unique @db.VarChar(100)
+  category    String   @db.VarChar(50)
+
+  teachSkills UserTeachSkill[]
+  learnSkills UserLearnSkill[]
+  endorsements SkillEndorsement[]
+  communities Community[]
+}
+
+model UserTeachSkill {
+  user_id  Int
+  skill_id Int
+
+  user     User  @relation(fields: [user_id], references: [id], onDelete: Cascade)
+  skill    Skill @relation(fields: [skill_id], references: [id], onDelete: Cascade)
+
+  @@id([user_id, skill_id])
+}
+
+model UserLearnSkill {
+  user_id  Int
+  skill_id Int
+
+  user     User  @relation(fields: [user_id], references: [id], onDelete: Cascade)
+  skill    Skill @relation(fields: [skill_id], references: [id], onDelete: Cascade)
+
+  @@id([user_id, skill_id])
+}
+
+model MatchRequest {
+  id             Int      @id @default(autoincrement())
+  sender_id      Int
+  receiver_id    Int
+  teach_skill_id Int
+  learn_skill_id Int
+  status         String   @default("pending")
+  created_at     DateTime @default(now())
+
+  sender         User     @relation("SentMatchRequests", fields: [sender_id], references: [id], onDelete: Cascade)
+  receiver       User     @relation("ReceivedMatchRequests", fields: [receiver_id], references: [id], onDelete: Cascade)
+}
+
+model Match {
+  id                Int      @id @default(autoincrement())
+  user_a_id         Int
+  user_b_id         Int
+  skill_a_teaches_b Int
+  skill_b_teaches_a Int
+  status            String   @default("active")
+  sessions_a        Int      @default(0)
+  sessions_b        Int      @default(0)
+  created_at        DateTime @default(now())
+
+  userA             User     @relation("UserAMatches", fields: [user_a_id], references: [id], onDelete: Cascade)
+  userB             User     @relation("UserBMatches", fields: [user_b_id], references: [id], onDelete: Cascade)
+  endorsements      SkillEndorsement[]
+  sessions          Session[]
+  chatRoom          ChatRoom?
+}
+
+model SkillEndorsement {
+  id          Int      @id @default(autoincrement())
+  endorser_id Int
+  endorsed_id Int
+  skill_id    Int
+  match_id    Int
+  rating      Int
+  created_at  DateTime @default(now())
+
+  endorser    User     @relation("EndorsementsGiven", fields: [endorser_id], references: [id], onDelete: Cascade)
+  endorsed    User     @relation("EndorsementsReceived", fields: [endorsed_id], references: [id], onDelete: Cascade)
+  skill       Skill    @relation(fields: [skill_id], references: [id], onDelete: Cascade)
+  match       Match    @relation(fields: [match_id], references: [id], onDelete: Cascade)
+
+  @@unique([endorser_id, endorsed_id, match_id])
+}
+
+model Session {
+  id           Int      @id @default(autoincrement())
+  match_id     Int
+  teacher_id   Int
+  learner_id   Int
+  skill_id     Int
+  scheduled_at DateTime
+  duration_min Int      @default(60)
+  status       String   @default("scheduled")
+  created_at   DateTime @default(now())
+
+  match        Match    @relation(fields: [match_id], references: [id], onDelete: Cascade)
+  teacher      User     @relation("TeacherSessions", fields: [teacher_id], references: [id], onDelete: Cascade)
+  learner      User     @relation("LearnerSessions", fields: [learner_id], references: [id], onDelete: Cascade)
+  notes        SessionNote[]
+}
+
+model SessionNote {
+  id         Int      @id @default(autoincrement())
+  session_id Int
+  user_id    Int
+  content    String   @db.Text
+  created_at DateTime @default(now())
+
+  session    Session  @relation(fields: [session_id], references: [id], onDelete: Cascade)
+  user       User     @relation(fields: [user_id], references: [id], onDelete: Cascade)
+}
+
+model ChatRoom {
+  id         Int      @id @default(autoincrement())
+  match_id   Int      @unique
+  created_at DateTime @default(now())
+
+  match      Match    @relation(fields: [match_id], references: [id], onDelete: Cascade)
+  messages   Message[]
+}
+
+model Message {
+  id           Int      @id @default(autoincrement())
+  room_id      Int
+  sender_id    Int
+  content      String   @db.Text
+  content_type String   @default("text")
+  language     String?  @db.VarChar(32)
+  reply_to_id  Int?
+  file_url     String?  @db.VarChar(500)
+  file_name    String?  @db.VarChar(255)
+  file_size    Int?
+  read_at      DateTime?
+  created_at   DateTime @default(now())
+
+  room         ChatRoom @relation(fields: [room_id], references: [id], onDelete: Cascade)
+  sender       User     @relation(fields: [sender_id], references: [id], onDelete: Cascade)
+  replyTo      Message? @relation("MessageReplies", fields: [reply_to_id], references: [id])
+  replies      Message[] @relation("MessageReplies")
+  reactions    MessageReaction[]
+}
+
+model MessageReaction {
+  message_id Int
+  user_id    Int
+  emoji      String   @db.VarChar(32)
+
+  message    Message  @relation(fields: [message_id], references: [id], onDelete: Cascade)
+  user       User     @relation(fields: [user_id], references: [id], onDelete: Cascade)
+
+  @@id([message_id, user_id, emoji])
+}
+
+model Community {
+  id          Int      @id @default(autoincrement())
+  skill_id    Int
+  name        String   @db.VarChar(100)
+  description String?  @db.Text
+
+  skill       Skill    @relation(fields: [skill_id], references: [id], onDelete: Cascade)
+  posts       Post[]
+}
+
+model Post {
+  id           Int      @id @default(autoincrement())
+  community_id Int
+  author_id    Int
+  content      String   @db.Text
+  upvotes      Int      @default(0)
+  status       String   @default("active")
+  created_at   DateTime @default(now())
+
+  community    Community @relation(fields: [community_id], references: [id], onDelete: Cascade)
+  author       User      @relation(fields: [author_id], references: [id], onDelete: Cascade)
+  comments     Comment[]
+  votes        PostVote[]
+}
+
+model Comment {
+  id         Int      @id @default(autoincrement())
+  post_id    Int
+  author_id  Int
+  content    String   @db.Text
+  parent_id  Int?
+  upvotes    Int      @default(0)
+  status     String   @default("active")
+  created_at DateTime @default(now())
+
+  post       Post     @relation(fields: [post_id], references: [id], onDelete: Cascade)
+  author     User     @relation(fields: [author_id], references: [id], onDelete: Cascade)
+  parent     Comment? @relation("CommentReplies", fields: [parent_id], references: [id])
+  replies    Comment[] @relation("CommentReplies")
+}
+
+model PostVote {
+  user_id    Int
+  post_id    Int
+  created_at DateTime @default(now())
+
+  user       User  @relation(fields: [user_id], references: [id], onDelete: Cascade)
+  post       Post  @relation(fields: [post_id], references: [id], onDelete: Cascade)
+
+  @@id([user_id, post_id])
+}
+
+model Report {
+  id          Int      @id @default(autoincrement())
+  reporter_id Int
+  target_type String
+  target_id   Int
+  reason      String
+  detail      String?  @db.Text
+  status      String   @default("open")
+  resolved_by Int?
+  resolution  String?  @db.Text
+  created_at  DateTime @default(now())
+
+  reporter    User     @relation("ReportsFiled", fields: [reporter_id], references: [id], onDelete: Cascade)
+}
+
+model Block {
+  blocker_id Int
+  blocked_id Int
+  created_at DateTime @default(now())
+
+  blocker    User  @relation("BlocksAsBlocker", fields: [blocker_id], references: [id], onDelete: Cascade)
+  blocked    User  @relation("BlocksAsBlocked", fields: [blocked_id], references: [id], onDelete: Cascade)
+
+  @@id([blocker_id, blocked_id])
+}
+
+model ReputationEvent {
+  id         Int      @id @default(autoincrement())
+  user_id    Int
+  event_type String
+  delta      Decimal  @db.Decimal(5,2)
+  note       String?  @db.Text
+  created_at DateTime @default(now())
+
+  user       User     @relation(fields: [user_id], references: [id], onDelete: Cascade)
+}
+
+model Notification {
+  id         Int      @id @default(autoincrement())
+  user_id    Int
+  type       String
+  payload    Json
+  read_at    DateTime?
+  created_at DateTime @default(now())
+
+  user       User     @relation(fields: [user_id], references: [id], onDelete: Cascade)
+}
+
+model AdminUser {
+  id            Int      @id @default(autoincrement())
+  username      String   @unique @db.VarChar(64)
+  email         String   @unique @db.VarChar(255)
+  password_hash String   @db.VarChar(255)
+  role          String   @default("moderator")
+  created_at    DateTime @default(now())
+
+  auditLogs     AuditLog[]
+}
+
+model AuditLog {
+  id          BigInt   @id @default(autoincrement())
+  admin_id    Int
+  action      String   @db.VarChar(100)
+  target_type String   @db.VarChar(50)
+  target_id   Int
+  metadata    Json?
+  created_at  DateTime @default(now())
+
+  admin       AdminUser @relation(fields: [admin_id], references: [id], onDelete: Cascade)
+}
+
+model DeviceToken {
+  id         Int      @id @default(autoincrement())
+  user_id    Int
+  token      String   @unique @db.VarChar(500)
+  created_at DateTime @default(now())
+
+  user       User     @relation(fields: [user_id], references: [id], onDelete: Cascade)
+}

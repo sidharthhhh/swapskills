@@ -1,9 +1,7 @@
-import { query } from '../../config/database';
-import { RowDataPacket, ResultSetHeader } from 'mysql2/promise';
+import prisma from '../../config/prisma';
 
 /**
- * Database access layer for notifications module.
- * All queries use parameterized SQL to prevent injection.
+ * Database access layer for notifications module using Prisma.
  */
 
 // ─── Interfaces ──────────────────────────────────────────────────────────────
@@ -17,90 +15,71 @@ export type NotificationType =
   | 'session_reminder'
   | 'endorsement_received';
 
-export interface NotificationRow extends RowDataPacket {
+export interface NotificationRow {
   id: number;
   user_id: number;
-  type: NotificationType;
-  payload: object;
+  type: string;
+  payload: any;
   read_at: Date | null;
   created_at: Date;
 }
 
 // ─── Notification Queries ────────────────────────────────────────────────────
 
-/**
- * Insert a new notification record.
- */
 export async function createNotification(
   userId: number,
   type: NotificationType,
   payload: object
-): Promise<ResultSetHeader> {
-  return query<ResultSetHeader>(
-    `INSERT INTO notifications (user_id, type, payload) VALUES (?, ?, ?)`,
-    [userId, type, JSON.stringify(payload)]
-  );
+) {
+  const notif = await prisma.notification.create({
+    data: {
+      user_id: userId,
+      type,
+      payload: payload as any,
+    }
+  });
+  return { insertId: notif.id };
 }
 
-/**
- * Fetch paginated notifications for a user.
- * Ordered: unread first, then by created_at descending.
- */
 export async function findNotificationsByUser(
   userId: number,
   limit: number,
   offset: number
 ): Promise<NotificationRow[]> {
-  const sql = `
-    SELECT id, user_id, type, payload, read_at, created_at
-    FROM notifications
-    WHERE user_id = ?
-    ORDER BY read_at IS NOT NULL ASC, created_at DESC
-    LIMIT ${Number(limit)} OFFSET ${Number(offset)}
-  `;
-  return query<NotificationRow[]>(sql, [userId]);
+  // Prisma orderBy doesn't directly support complex IS NOT NULL sort,
+  // but we can sort by read_at ASC (nulls first usually, but Prisma puts nulls first in ascending)
+  // Let's sort by read_at (nulls first in Prisma) then created_at DESC
+  return prisma.notification.findMany({
+    where: { user_id: userId },
+    orderBy: [
+      { read_at: 'asc' }, // nulls first
+      { created_at: 'desc' }
+    ],
+    skip: offset,
+    take: limit,
+  });
 }
 
-/**
- * Count total notifications for a user (for pagination metadata).
- */
 export async function countNotificationsByUser(userId: number): Promise<number> {
-  const rows = await query<RowDataPacket[]>(
-    'SELECT COUNT(*) AS total FROM notifications WHERE user_id = ?',
-    [userId]
-  );
-  return Number(rows[0].total);
+  return prisma.notification.count({ where: { user_id: userId } });
 }
 
-/**
- * Find a notification by ID.
- */
 export async function findNotificationById(notificationId: number): Promise<NotificationRow | null> {
-  const rows = await query<NotificationRow[]>(
-    'SELECT id, user_id, type, payload, read_at, created_at FROM notifications WHERE id = ?',
-    [notificationId]
-  );
-  return rows.length > 0 ? rows[0] : null;
+  return prisma.notification.findUnique({ where: { id: notificationId } });
 }
 
-/**
- * Mark a single notification as read.
- */
-export async function markAsRead(notificationId: number): Promise<ResultSetHeader> {
-  return query<ResultSetHeader>(
-    'UPDATE notifications SET read_at = NOW() WHERE id = ? AND read_at IS NULL',
-    [notificationId]
-  );
+export async function markAsRead(notificationId: number) {
+  await prisma.notification.updateMany({
+    where: { id: notificationId, read_at: null },
+    data: { read_at: new Date() }
+  });
+  return { affectedRows: 1 };
 }
 
-/**
- * Mark all notifications as read for a user.
- */
-export async function markAllAsRead(userId: number): Promise<ResultSetHeader> {
-  return query<ResultSetHeader>(
-    'UPDATE notifications SET read_at = NOW() WHERE user_id = ? AND read_at IS NULL',
-    [userId]
-  );
+export async function markAllAsRead(userId: number) {
+  await prisma.notification.updateMany({
+    where: { user_id: userId, read_at: null },
+    data: { read_at: new Date() }
+  });
+  return { affectedRows: 1 };
 }
-
-

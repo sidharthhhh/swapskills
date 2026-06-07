@@ -1,15 +1,13 @@
-import { query } from '../../config/database';
-import { RowDataPacket, ResultSetHeader } from 'mysql2/promise';
+import prisma from '../../config/prisma';
 
 /**
- * Database access layer for sessions module.
- * All queries use parameterized SQL to prevent injection.
+ * Database access layer for sessions module using Prisma.
  * IDOR prevention: verify match participant before allowing operations.
  */
 
 // ─── Interfaces ──────────────────────────────────────────────────────────────
 
-export interface SessionRow extends RowDataPacket {
+export interface SessionRow {
   id: number;
   match_id: number;
   teacher_id: number;
@@ -17,11 +15,11 @@ export interface SessionRow extends RowDataPacket {
   skill_id: number;
   scheduled_at: Date;
   duration_min: number;
-  status: 'scheduled' | 'completed' | 'cancelled' | 'no_show';
+  status: string;
   created_at: Date;
 }
 
-export interface SessionNoteRow extends RowDataPacket {
+export interface SessionNoteRow {
   id: number;
   session_id: number;
   user_id: number;
@@ -30,7 +28,7 @@ export interface SessionNoteRow extends RowDataPacket {
   username: string;
 }
 
-export interface MatchParticipantRow extends RowDataPacket {
+export interface MatchParticipantRow {
   id: number;
   user_a_id: number;
   user_b_id: number;
@@ -38,27 +36,23 @@ export interface MatchParticipantRow extends RowDataPacket {
 
 // ─── Match Verification (IDOR Prevention) ────────────────────────────────────
 
-/**
- * Verify that a user is a participant of the given match.
- * Returns the match row if the user is a participant, null otherwise.
- */
 export async function verifyMatchParticipant(
   matchId: number,
   userId: number
 ): Promise<MatchParticipantRow | null> {
-  const rows = await query<MatchParticipantRow[]>(
-    `SELECT id, user_a_id, user_b_id FROM matches
-     WHERE id = ? AND (user_a_id = ? OR user_b_id = ?)`,
-    [matchId, userId, userId]
-  );
-  return rows.length > 0 ? rows[0] : null;
+  const m = await prisma.match.findFirst({
+    where: {
+      id: matchId,
+      OR: [{ user_a_id: userId }, { user_b_id: userId }]
+    },
+    select: { id: true, user_a_id: true, user_b_id: true }
+  });
+
+  return m ? { id: m.id, user_a_id: m.user_a_id, user_b_id: m.user_b_id } : null;
 }
 
 // ─── Session Queries ─────────────────────────────────────────────────────────
 
-/**
- * Create a new session.
- */
 export async function createSession(
   matchId: number,
   teacherId: number,
@@ -66,82 +60,100 @@ export async function createSession(
   skillId: number,
   scheduledAt: string,
   durationMin: number
-): Promise<ResultSetHeader> {
-  return query<ResultSetHeader>(
-    `INSERT INTO sessions (match_id, teacher_id, learner_id, skill_id, scheduled_at, duration_min)
-     VALUES (?, ?, ?, ?, ?, ?)`,
-    [matchId, teacherId, learnerId, skillId, scheduledAt, durationMin]
-  );
+) {
+  const session = await prisma.session.create({
+    data: {
+      match_id: matchId,
+      teacher_id: teacherId,
+      learner_id: learnerId,
+      skill_id: skillId,
+      scheduled_at: new Date(scheduledAt),
+      duration_min: durationMin,
+    }
+  });
+  return { insertId: session.id };
 }
 
-/**
- * Get all sessions for a specific match.
- * IDOR prevention is handled at the service layer by verifying match participation first.
- */
 export async function getSessionsByMatchId(matchId: number): Promise<SessionRow[]> {
-  return query<SessionRow[]>(
-    `SELECT id, match_id, teacher_id, learner_id, skill_id, scheduled_at, duration_min, status, created_at
-     FROM sessions
-     WHERE match_id = ?
-     ORDER BY scheduled_at DESC`,
-    [matchId]
-  );
+  const sessions = await prisma.session.findMany({
+    where: { match_id: matchId },
+    orderBy: { scheduled_at: 'desc' }
+  });
+
+  return sessions.map(s => ({
+    id: s.id,
+    match_id: s.match_id,
+    teacher_id: s.teacher_id,
+    learner_id: s.learner_id,
+    skill_id: s.skill_id,
+    scheduled_at: s.scheduled_at,
+    duration_min: s.duration_min,
+    status: s.status,
+    created_at: s.created_at,
+  }));
 }
 
-/**
- * Get a session by ID.
- */
 export async function getSessionById(sessionId: number): Promise<SessionRow | null> {
-  const rows = await query<SessionRow[]>(
-    `SELECT id, match_id, teacher_id, learner_id, skill_id, scheduled_at, duration_min, status, created_at
-     FROM sessions
-     WHERE id = ?`,
-    [sessionId]
-  );
-  return rows.length > 0 ? rows[0] : null;
+  const s = await prisma.session.findUnique({
+    where: { id: sessionId }
+  });
+
+  if (!s) return null;
+
+  return {
+    id: s.id,
+    match_id: s.match_id,
+    teacher_id: s.teacher_id,
+    learner_id: s.learner_id,
+    skill_id: s.skill_id,
+    scheduled_at: s.scheduled_at,
+    duration_min: s.duration_min,
+    status: s.status,
+    created_at: s.created_at,
+  };
 }
 
-/**
- * Update session status.
- */
 export async function updateSessionStatus(
   sessionId: number,
   status: 'completed' | 'cancelled' | 'no_show'
-): Promise<ResultSetHeader> {
-  return query<ResultSetHeader>(
-    `UPDATE sessions SET status = ? WHERE id = ?`,
-    [status, sessionId]
-  );
+) {
+  await prisma.session.update({
+    where: { id: sessionId },
+    data: { status }
+  });
+  return { affectedRows: 1 };
 }
 
 // ─── Session Notes Queries ───────────────────────────────────────────────────
 
-/**
- * Add a note to a session.
- */
 export async function createSessionNote(
   sessionId: number,
   userId: number,
   content: string
-): Promise<ResultSetHeader> {
-  return query<ResultSetHeader>(
-    `INSERT INTO session_notes (session_id, user_id, content)
-     VALUES (?, ?, ?)`,
-    [sessionId, userId, content]
-  );
+) {
+  const note = await prisma.sessionNote.create({
+    data: {
+      session_id: sessionId,
+      user_id: userId,
+      content,
+    }
+  });
+  return { insertId: note.id };
 }
 
-/**
- * Get all notes for a session, with the author's username.
- */
 export async function getNotesBySessionId(sessionId: number): Promise<SessionNoteRow[]> {
-  return query<SessionNoteRow[]>(
-    `SELECT sn.id, sn.session_id, sn.user_id, sn.content, sn.created_at,
-       u.username
-     FROM session_notes sn
-     JOIN users u ON u.id = sn.user_id
-     WHERE sn.session_id = ?
-     ORDER BY sn.created_at ASC`,
-    [sessionId]
-  );
+  const notes = await prisma.sessionNote.findMany({
+    where: { session_id: sessionId },
+    include: { user: { select: { username: true } } },
+    orderBy: { created_at: 'asc' }
+  });
+
+  return notes.map(n => ({
+    id: n.id,
+    session_id: n.session_id,
+    user_id: n.user_id,
+    content: n.content,
+    created_at: n.created_at,
+    username: n.user.username,
+  }));
 }

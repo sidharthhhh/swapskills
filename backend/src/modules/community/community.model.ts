@@ -1,21 +1,19 @@
-import { query } from '../../config/database';
-import { RowDataPacket, ResultSetHeader } from 'mysql2/promise';
+import prisma from '../../config/prisma';
 
 /**
- * Database access layer for community module.
- * All queries use parameterized SQL to prevent injection.
+ * Database access layer for community module using Prisma.
  */
 
 // ─── Interfaces ──────────────────────────────────────────────────────────────
 
-export interface CommunityRow extends RowDataPacket {
+export interface CommunityRow {
   id: number;
   skill_id: number;
   name: string;
   description: string | null;
 }
 
-export interface PostRow extends RowDataPacket {
+export interface PostRow {
   id: number;
   community_id: number;
   author_id: number;
@@ -26,7 +24,7 @@ export interface PostRow extends RowDataPacket {
   created_at: Date;
 }
 
-export interface CommentRow extends RowDataPacket {
+export interface CommentRow {
   id: number;
   post_id: number;
   author_id: number;
@@ -40,268 +38,263 @@ export interface CommentRow extends RowDataPacket {
 
 // ─── Community Queries ───────────────────────────────────────────────────────
 
-/**
- * Fetch all communities with their associated skill info.
- */
 export async function findAllCommunities(): Promise<CommunityRow[]> {
-  const sql = `
-    SELECT c.id, c.skill_id, c.name, c.description
-    FROM communities c
-    ORDER BY c.name
-  `;
-  return query<CommunityRow[]>(sql);
+  return prisma.community.findMany({
+    orderBy: { name: 'asc' }
+  });
 }
 
-/**
- * Check if a community exists by ID.
- */
 export async function communityExists(communityId: number): Promise<boolean> {
-  const rows = await query<RowDataPacket[]>(
-    'SELECT 1 FROM communities WHERE id = ? LIMIT 1',
-    [communityId]
-  );
-  return rows.length > 0;
+  const c = await prisma.community.findUnique({
+    where: { id: communityId },
+    select: { id: true }
+  });
+  return c !== null;
 }
 
 // ─── Post Queries ────────────────────────────────────────────────────────────
 
-/**
- * Fetch paginated posts for a community, excluding posts from blocked users.
- * If userId is null (unauthenticated), no block filtering is applied.
- */
 export async function findPostsByCommunity(
   communityId: number,
   userId: number | null,
   limit: number,
   offset: number
 ): Promise<PostRow[]> {
-  let sql: string;
-  let params: (number | null)[];
+  const whereClause: any = {
+    community_id: communityId,
+    status: 'active'
+  };
 
   if (userId) {
-    sql = `
-      SELECT p.id, p.community_id, p.author_id, u.username AS author_username,
-             p.content, p.upvotes, p.status, p.created_at
-      FROM posts p
-      JOIN users u ON u.id = p.author_id
-      WHERE p.community_id = ?
-        AND p.status = 'active'
-        AND p.author_id NOT IN (
-          SELECT blocked_id FROM blocks WHERE blocker_id = ?
-        )
-      ORDER BY p.created_at DESC
-      LIMIT ${Number(limit)} OFFSET ${Number(offset)}
-    `;
-    params = [communityId, userId];
-  } else {
-    sql = `
-      SELECT p.id, p.community_id, p.author_id, u.username AS author_username,
-             p.content, p.upvotes, p.status, p.created_at
-      FROM posts p
-      JOIN users u ON u.id = p.author_id
-      WHERE p.community_id = ?
-        AND p.status = 'active'
-      ORDER BY p.created_at DESC
-      LIMIT ${Number(limit)} OFFSET ${Number(offset)}
-    `;
-    params = [communityId];
+    // Exclude posts from blocked users
+    const blockedUsers = await prisma.block.findMany({
+      where: { blocker_id: userId },
+      select: { blocked_id: true }
+    });
+    const blockedIds = blockedUsers.map(b => b.blocked_id);
+    if (blockedIds.length > 0) {
+      whereClause.author_id = { notIn: blockedIds };
+    }
   }
 
-  return query<PostRow[]>(sql, params);
+  const posts = await prisma.post.findMany({
+    where: whereClause,
+    include: { author: { select: { username: true } } },
+    orderBy: { created_at: 'desc' },
+    skip: offset,
+    take: limit,
+  });
+
+  return posts.map(p => ({
+    id: p.id,
+    community_id: p.community_id,
+    author_id: p.author_id,
+    author_username: p.author.username,
+    content: p.content,
+    upvotes: p.upvotes,
+    status: p.status,
+    created_at: p.created_at,
+  }));
 }
 
-/**
- * Count total active posts in a community (for pagination metadata).
- */
 export async function countPostsByCommunity(
   communityId: number,
   userId: number | null
 ): Promise<number> {
-  let sql: string;
-  let params: (number | null)[];
+  const whereClause: any = {
+    community_id: communityId,
+    status: 'active'
+  };
 
   if (userId) {
-    sql = `
-      SELECT COUNT(*) AS total
-      FROM posts p
-      WHERE p.community_id = ?
-        AND p.status = 'active'
-        AND p.author_id NOT IN (
-          SELECT blocked_id FROM blocks WHERE blocker_id = ?
-        )
-    `;
-    params = [communityId, userId];
-  } else {
-    sql = `
-      SELECT COUNT(*) AS total
-      FROM posts p
-      WHERE p.community_id = ?
-        AND p.status = 'active'
-    `;
-    params = [communityId];
+    const blockedUsers = await prisma.block.findMany({
+      where: { blocker_id: userId },
+      select: { blocked_id: true }
+    });
+    const blockedIds = blockedUsers.map(b => b.blocked_id);
+    if (blockedIds.length > 0) {
+      whereClause.author_id = { notIn: blockedIds };
+    }
   }
 
-  const rows = await query<RowDataPacket[]>(sql, params);
-  return Number(rows[0].total);
+  return prisma.post.count({ where: whereClause });
 }
 
-/**
- * Create a new post in a community.
- */
 export async function createPost(
   communityId: number,
   authorId: number,
   content: string
-): Promise<ResultSetHeader> {
-  return query<ResultSetHeader>(
-    `INSERT INTO posts (community_id, author_id, content) VALUES (?, ?, ?)`,
-    [communityId, authorId, content]
-  );
+) {
+  const post = await prisma.post.create({
+    data: {
+      community_id: communityId,
+      author_id: authorId,
+      content,
+    }
+  });
+  return { insertId: post.id };
 }
 
-/**
- * Find a post by ID.
- */
 export async function findPostById(postId: number): Promise<PostRow | null> {
-  const rows = await query<PostRow[]>(
-    `SELECT p.id, p.community_id, p.author_id, u.username AS author_username,
-            p.content, p.upvotes, p.status, p.created_at
-     FROM posts p
-     JOIN users u ON u.id = p.author_id
-     WHERE p.id = ?`,
-    [postId]
-  );
-  return rows.length > 0 ? rows[0] : null;
+  const p = await prisma.post.findUnique({
+    where: { id: postId },
+    include: { author: { select: { username: true } } }
+  });
+
+  if (!p) return null;
+
+  return {
+    id: p.id,
+    community_id: p.community_id,
+    author_id: p.author_id,
+    author_username: p.author.username,
+    content: p.content,
+    upvotes: p.upvotes,
+    status: p.status,
+    created_at: p.created_at,
+  };
 }
 
-/**
- * Delete a post (set status to 'removed').
- */
-export async function deletePost(postId: number): Promise<ResultSetHeader> {
-  return query<ResultSetHeader>(
-    `UPDATE posts SET status = 'removed' WHERE id = ?`,
-    [postId]
-  );
+export async function deletePost(postId: number) {
+  await prisma.post.update({
+    where: { id: postId },
+    data: { status: 'removed' }
+  });
+  return { affectedRows: 1 };
 }
 
 // ─── Upvote Queries ──────────────────────────────────────────────────────────
 
-/**
- * Attempt to insert a vote record. Uses INSERT IGNORE to prevent duplicates.
- * Returns the result — affectedRows will be 0 if the vote already existed.
- */
-export async function insertPostVote(userId: number, postId: number): Promise<ResultSetHeader> {
-  return query<ResultSetHeader>(
-    `INSERT IGNORE INTO post_votes (user_id, post_id) VALUES (?, ?)`,
-    [userId, postId]
-  );
+export async function insertPostVote(userId: number, postId: number) {
+  // Try to create the vote, if it fails, it means it exists
+  try {
+    await prisma.postVote.create({
+      data: { user_id: userId, post_id: postId }
+    });
+    return { affectedRows: 1 };
+  } catch (e: any) {
+    if (e.code === 'P2002') {
+      return { affectedRows: 0 };
+    }
+    throw e;
+  }
 }
 
-/**
- * Increment the upvotes counter on a post.
- */
-export async function incrementPostUpvotes(postId: number): Promise<ResultSetHeader> {
-  return query<ResultSetHeader>(
-    `UPDATE posts SET upvotes = upvotes + 1 WHERE id = ?`,
-    [postId]
-  );
+export async function incrementPostUpvotes(postId: number) {
+  await prisma.post.update({
+    where: { id: postId },
+    data: { upvotes: { increment: 1 } }
+  });
+  return { affectedRows: 1 };
 }
 
 // ─── Comment Queries ─────────────────────────────────────────────────────────
 
-/**
- * Fetch comments for a post, excluding comments from blocked users.
- */
 export async function findCommentsByPost(
   postId: number,
   userId: number | null
 ): Promise<CommentRow[]> {
-  let sql: string;
-  let params: (number | null)[];
+  const whereClause: any = {
+    post_id: postId,
+    status: 'active'
+  };
 
   if (userId) {
-    sql = `
-      SELECT c.id, c.post_id, c.author_id, u.username AS author_username,
-             c.content, c.parent_id, c.upvotes, c.status, c.created_at
-      FROM comments c
-      JOIN users u ON u.id = c.author_id
-      WHERE c.post_id = ?
-        AND c.status = 'active'
-        AND c.author_id NOT IN (
-          SELECT blocked_id FROM blocks WHERE blocker_id = ?
-        )
-      ORDER BY c.created_at ASC
-    `;
-    params = [postId, userId];
-  } else {
-    sql = `
-      SELECT c.id, c.post_id, c.author_id, u.username AS author_username,
-             c.content, c.parent_id, c.upvotes, c.status, c.created_at
-      FROM comments c
-      JOIN users u ON u.id = c.author_id
-      WHERE c.post_id = ?
-        AND c.status = 'active'
-      ORDER BY c.created_at ASC
-    `;
-    params = [postId];
+    const blockedUsers = await prisma.block.findMany({
+      where: { blocker_id: userId },
+      select: { blocked_id: true }
+    });
+    const blockedIds = blockedUsers.map(b => b.blocked_id);
+    if (blockedIds.length > 0) {
+      whereClause.author_id = { notIn: blockedIds };
+    }
   }
 
-  return query<CommentRow[]>(sql, params);
+  const comments = await prisma.comment.findMany({
+    where: whereClause,
+    include: { author: { select: { username: true } } },
+    orderBy: { created_at: 'asc' }
+  });
+
+  return comments.map(c => ({
+    id: c.id,
+    post_id: c.post_id,
+    author_id: c.author_id,
+    author_username: c.author.username,
+    content: c.content,
+    parent_id: c.parent_id,
+    upvotes: c.upvotes,
+    status: c.status,
+    created_at: c.created_at,
+  }));
 }
 
-/**
- * Create a new comment on a post.
- */
 export async function createComment(
   postId: number,
   authorId: number,
   content: string,
   parentId: number | null
-): Promise<ResultSetHeader> {
-  return query<ResultSetHeader>(
-    `INSERT INTO comments (post_id, author_id, content, parent_id) VALUES (?, ?, ?, ?)`,
-    [postId, authorId, content, parentId]
-  );
+) {
+  const comment = await prisma.comment.create({
+    data: {
+      post_id: postId,
+      author_id: authorId,
+      content,
+      parent_id: parentId,
+    }
+  });
+  return { insertId: comment.id };
 }
 
-/**
- * Find a comment by ID.
- */
 export async function findCommentById(commentId: number): Promise<CommentRow | null> {
-  const rows = await query<CommentRow[]>(
-    `SELECT c.id, c.post_id, c.author_id, u.username AS author_username,
-            c.content, c.parent_id, c.upvotes, c.status, c.created_at
-     FROM comments c
-     JOIN users u ON u.id = c.author_id
-     WHERE c.id = ?`,
-    [commentId]
-  );
-  return rows.length > 0 ? rows[0] : null;
+  const c = await prisma.comment.findUnique({
+    where: { id: commentId },
+    include: { author: { select: { username: true } } }
+  });
+
+  if (!c) return null;
+
+  return {
+    id: c.id,
+    post_id: c.post_id,
+    author_id: c.author_id,
+    author_username: c.author.username,
+    content: c.content,
+    parent_id: c.parent_id,
+    upvotes: c.upvotes,
+    status: c.status,
+    created_at: c.created_at,
+  };
 }
 
-/**
- * Increment the upvotes counter on a comment.
- */
-export async function incrementCommentUpvotes(commentId: number): Promise<ResultSetHeader> {
-  return query<ResultSetHeader>(
-    `UPDATE comments SET upvotes = upvotes + 1 WHERE id = ?`,
-    [commentId]
-  );
+export async function incrementCommentUpvotes(commentId: number) {
+  await prisma.comment.update({
+    where: { id: commentId },
+    data: { upvotes: { increment: 1 } }
+  });
+  return { affectedRows: 1 };
 }
 
-/**
- * Fetch top 10 trending posts by upvotes from the last 7 days.
- */
 export async function findTrendingPosts(): Promise<PostRow[]> {
-  const sql = `
-    SELECT p.id, p.community_id, p.author_id, u.username AS author_username,
-           p.content, p.upvotes, p.status, p.created_at
-    FROM posts p
-    JOIN users u ON u.id = p.author_id
-    WHERE p.status = 'active'
-      AND p.created_at >= DATE_SUB(NOW(), INTERVAL 7 DAY)
-    ORDER BY p.upvotes DESC
-    LIMIT 10
-  `;
-  return query<PostRow[]>(sql);
+  const sevenDaysAgo = new Date(Date.now() - 7 * 24 * 60 * 60 * 1000);
+  const posts = await prisma.post.findMany({
+    where: {
+      status: 'active',
+      created_at: { gte: sevenDaysAgo }
+    },
+    include: { author: { select: { username: true } } },
+    orderBy: { upvotes: 'desc' },
+    take: 10,
+  });
+
+  return posts.map(p => ({
+    id: p.id,
+    community_id: p.community_id,
+    author_id: p.author_id,
+    author_username: p.author.username,
+    content: p.content,
+    upvotes: p.upvotes,
+    status: p.status,
+    created_at: p.created_at,
+  }));
 }

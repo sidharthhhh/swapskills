@@ -2,8 +2,8 @@ import bcrypt from 'bcrypt';
 import jwt from 'jsonwebtoken';
 import { ResultSetHeader } from 'mysql2/promise';
 import * as adminModel from './admin.model';
-import { query } from '../../config/database';
-import { redisClient } from '../../config/redis';
+// import { redisClient } from '../../config/redis';
+import prisma from '../../config/prisma';
 import { AppError } from '../../utils/AppError';
 import { logger } from '../../config/logger';
 
@@ -171,39 +171,37 @@ export async function removePost(postId: number, adminId: number) {
 
 export async function addSkill(name: string, category: string, adminId: number) {
   // Insert into skills table
-  const result = await query<ResultSetHeader>(
-    'INSERT INTO skills (name, category) VALUES (?, ?)',
-    [name, category]
-  );
+  const newSkill = await prisma.skill.create({
+    data: { name, category }
+  });
 
   // Record audit log
-  await adminModel.recordAuditLog(adminId, 'skill_added', 'skill', result.insertId, { name, category });
+  await adminModel.recordAuditLog(adminId, 'skill_added', 'skill', newSkill.id, { name, category });
 
-  // Invalidate skills cache in Redis
-  await redisClient.del('skills:all', 'skills:categories', 'skills:gap');
+  // Invalidate skills cache in Redis (Redis removed)
+  // await redisClient.del('skills:all', 'skills:categories', 'skills:gap');
 
-  logger.info('Admin added skill', { adminId, skillId: result.insertId, name, category });
+  logger.info('Admin added skill', { adminId, skillId: newSkill.id, name, category });
 
-  return { id: result.insertId, name, category };
+  return { id: newSkill.id, name, category };
 }
 
 export async function deleteSkill(skillId: number, adminId: number) {
-  // Remove skill associations first
-  await query<ResultSetHeader>('DELETE FROM user_teach_skills WHERE skill_id = ?', [skillId]);
-  await query<ResultSetHeader>('DELETE FROM user_learn_skills WHERE skill_id = ?', [skillId]);
-
-  // Delete the skill
-  const result = await query<ResultSetHeader>('DELETE FROM skills WHERE id = ?', [skillId]);
-
-  if (result.affectedRows === 0) {
-    throw new AppError(404, 'Skill not found');
+  try {
+    // Delete the skill (cascade deletes associations based on prisma schema)
+    await prisma.skill.delete({ where: { id: skillId } });
+  } catch (err: any) {
+    if (err.code === 'P2025') {
+      throw new AppError(404, 'Skill not found');
+    }
+    throw err;
   }
 
   // Record audit log
   await adminModel.recordAuditLog(adminId, 'skill_deleted', 'skill', skillId, {});
 
-  // Invalidate skills cache in Redis
-  await redisClient.del('skills:all', 'skills:categories', 'skills:gap');
+  // Invalidate skills cache in Redis (Redis removed)
+  // await redisClient.del('skills:all', 'skills:categories', 'skills:gap');
 
   logger.info('Admin deleted skill', { adminId, skillId });
 }

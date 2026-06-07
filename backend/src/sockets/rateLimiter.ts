@@ -1,41 +1,44 @@
-import { redisClient } from '../config/redis';
 import { logger } from '../config/logger';
 
 /**
- * Socket.IO rate limiter using Redis sliding window.
+ * Socket.IO rate limiter using memory.
  * Limits: 30 events per 10 seconds per user.
  */
 
 const MAX_EVENTS = 30;
 const WINDOW_SECONDS = 10;
+const memoryStore = new Map<string, { count: number, resetAt: number }>();
 
 /**
  * Check if a user has exceeded the rate limit for socket events.
- * Uses a Redis key with TTL to track event count per user.
+ * Uses a memory map with TTL to track event count per user.
  *
  * @param userId - The user's numeric ID
  * @returns true if the event is allowed, false if rate limited
  */
 export async function checkSocketRateLimit(userId: number): Promise<boolean> {
   const key = `socket_rate:${userId}`;
+  const now = Date.now();
 
   try {
-    const current = await redisClient.incr(key);
+    let current = memoryStore.get(key);
 
-    // Set TTL on first event in the window
-    if (current === 1) {
-      await redisClient.expire(key, WINDOW_SECONDS);
+    if (!current || now > current.resetAt) {
+      current = { count: 1, resetAt: now + WINDOW_SECONDS * 1000 };
+      memoryStore.set(key, current);
+    } else {
+      current.count++;
     }
 
-    if (current > MAX_EVENTS) {
-      logger.warn('Socket rate limit exceeded', { userId, count: current });
+    if (current.count > MAX_EVENTS) {
+      logger.warn('Socket rate limit exceeded', { userId, count: current.count });
       return false;
     }
 
+    // Optional: cleanup old entries periodically (not shown for brevity)
     return true;
   } catch (err) {
-    // If Redis is unavailable, allow the event (fail open)
-    logger.error('Socket rate limiter Redis error', {
+    logger.error('Socket rate limiter memory error', {
       userId,
       error: err instanceof Error ? err.message : 'Unknown error',
     });

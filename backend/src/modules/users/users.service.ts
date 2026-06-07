@@ -1,5 +1,5 @@
 import * as usersModel from './users.model';
-import { redisClient } from '../../config/redis';
+// import { redisClient } from '../../config/redis';
 import { logger } from '../../config/logger';
 import { AppError } from '../../utils/AppError';
 import { sanitize } from '../../utils/sanitize';
@@ -72,11 +72,11 @@ export async function updateProfile(
 
   await usersModel.updateProfile(userId, sanitizedData);
 
-  // Invalidate profile cache
-  const profile = await usersModel.getProfileById(userId);
-  if (profile) {
-    await redisClient.del(`user:${profile.uid}:profile`);
-  }
+  // Invalidate profile cache (Redis removed)
+  // const profile = await usersModel.getProfileById(userId);
+  // if (profile) {
+  //   await redisClient.del(`user:${profile.uid}:profile`);
+  // }
 
   logger.info('Profile updated', { userId });
   return await getOwnProfile(userId);
@@ -93,11 +93,11 @@ export async function addTeachSkill(userId: number, skillId: number) {
 
   await usersModel.addTeachSkill(userId, skillId);
 
-  // Invalidate caches
-  const profile = await usersModel.getProfileById(userId);
-  if (profile) {
-    await redisClient.del(`user:${profile.uid}:skills`);
-  }
+  // Invalidate caches (Redis removed)
+  // const profile = await usersModel.getProfileById(userId);
+  // if (profile) {
+  //   await redisClient.del(`user:${profile.uid}:skills`);
+  // }
 
   logger.info('Teach skill added', { userId, skillId });
   return await usersModel.getTeachSkills(userId);
@@ -112,11 +112,11 @@ export async function addLearnSkill(userId: number, skillId: number) {
 
   await usersModel.addLearnSkill(userId, skillId);
 
-  // Invalidate caches
-  const profile = await usersModel.getProfileById(userId);
-  if (profile) {
-    await redisClient.del(`user:${profile.uid}:skills`);
-  }
+  // Invalidate caches (Redis removed)
+  // const profile = await usersModel.getProfileById(userId);
+  // if (profile) {
+  //   await redisClient.del(`user:${profile.uid}:skills`);
+  // }
 
   logger.info('Learn skill added', { userId, skillId });
   return await usersModel.getLearnSkills(userId);
@@ -128,11 +128,11 @@ export async function removeTeachSkill(userId: number, skillId: number) {
     throw new AppError(404, 'Skill not found in your teach list');
   }
 
-  // Invalidate caches
-  const profile = await usersModel.getProfileById(userId);
-  if (profile) {
-    await redisClient.del(`user:${profile.uid}:skills`);
-  }
+  // Invalidate caches (Redis removed)
+  // const profile = await usersModel.getProfileById(userId);
+  // if (profile) {
+  //   await redisClient.del(`user:${profile.uid}:skills`);
+  // }
 
   logger.info('Teach skill removed', { userId, skillId });
 }
@@ -143,11 +143,11 @@ export async function removeLearnSkill(userId: number, skillId: number) {
     throw new AppError(404, 'Skill not found in your learn list');
   }
 
-  // Invalidate caches
-  const profile = await usersModel.getProfileById(userId);
-  if (profile) {
-    await redisClient.del(`user:${profile.uid}:skills`);
-  }
+  // Invalidate caches (Redis removed)
+  // const profile = await usersModel.getProfileById(userId);
+  // if (profile) {
+  //   await redisClient.del(`user:${profile.uid}:skills`);
+  // }
 
   logger.info('Learn skill removed', { userId, skillId });
 }
@@ -219,10 +219,10 @@ export async function deleteAccount(userId: number, userUid: string) {
   // Cascade delete all user data in a single transaction
   await usersModel.cascadeDeleteUser(userId);
 
-  // Clear Redis caches
-  await redisClient.del(`user:${userUid}:profile`);
-  await redisClient.del(`user:${userUid}:skills`);
-  await redisClient.del(`user:${userUid}:tokens`);
+  // Clear Redis caches (Redis removed)
+  // await redisClient.del(`user:${userUid}:profile`);
+  // await redisClient.del(`user:${userUid}:skills`);
+  // await redisClient.del(`user:${userUid}:tokens`);
 
   logger.info('Account deleted (GDPR)', { userId, userUid });
 }

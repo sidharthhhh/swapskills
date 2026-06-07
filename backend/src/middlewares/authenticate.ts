@@ -1,6 +1,5 @@
 import { Request, Response, NextFunction } from 'express';
 import { verifyToken } from '../utils/tokenService';
-import { redisClient } from '../config/redis';
 import { logger } from '../config/logger';
 import { findUserByUid } from '../modules/auth/auth.model';
 import { AppError } from '../utils/AppError';
@@ -57,19 +56,7 @@ export async function authenticate(
       throw new AppError(401, 'Authentication required');
     }
 
-    // 3. Check if token's JTI is in Redis revocation list
-    if (payload.jti) {
-      const isRevoked = await redisClient.exists(`revoked:${payload.jti}`);
-      if (isRevoked) {
-        logger.warn('Auth failed: token has been revoked', {
-          jti: payload.jti,
-          uid: payload.sub,
-          ip: req.ip,
-          path: req.path,
-        });
-        throw new AppError(401, 'Authentication required');
-      }
-    }
+    // 3. (Token revocation check removed since Redis is disabled)
 
     // 4. Look up user by uid from token payload
     const user = await findUserByUid(payload.sub);

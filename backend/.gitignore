@@ -3,3 +3,5 @@ dist/
 logs/
 .env
 keys/*.pem
+
+/src/generated/prisma

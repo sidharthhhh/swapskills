@@ -9,37 +9,26 @@ import communityRoutes from '../modules/community/community.routes';
 import sessionsRoutes from '../modules/sessions/sessions.routes';
 import adminRoutes from '../modules/admin/admin.routes';
 import notificationsRoutes from '../modules/notifications/notifications.routes';
-import { pool } from '../config/database';
-import { redisClient } from '../config/redis';
-
+import prisma from '../config/prisma';
 const router = Router();
 
-// Health check endpoint — verifies DB and Redis connectivity
+// Health check endpoint — verifies DB connectivity
 router.get('/health', async (req: Request, res: Response) => {
   let dbStatus = 'disconnected';
-  let redisStatus = 'disconnected';
 
   try {
-    await pool.query('SELECT 1');
+    await prisma.$queryRaw`SELECT 1`;
     dbStatus = 'connected';
   } catch {
     dbStatus = 'disconnected';
   }
 
-  try {
-    const pong = await redisClient.ping();
-    redisStatus = pong === 'PONG' ? 'connected' : 'disconnected';
-  } catch {
-    redisStatus = 'disconnected';
-  }
-
-  const allHealthy = dbStatus === 'connected' && redisStatus === 'connected';
+  const allHealthy = dbStatus === 'connected';
   const statusCode = allHealthy ? 200 : 503;
 
   res.status(statusCode).json({
     status: allHealthy ? 'ok' : 'degraded',
     db: dbStatus,
-    redis: redisStatus,
     timestamp: new Date().toISOString(),
   });
 });

@@ -1,138 +1,116 @@
-import { query } from '../../config/database';
-import { RowDataPacket, ResultSetHeader } from 'mysql2/promise';
+import prisma from '../../config/prisma';
 
 /**
- * Database access layer for auth module.
- * All queries use parameterized SQL to prevent injection.
+ * Database access layer for auth module using Prisma.
  */
 
 // ─── User Queries ────────────────────────────────────────────────────────────
-
-export interface UserRow extends RowDataPacket {
-  id: number;
-  uid: string;
-  username: string;
-  password_hash: string;
-  trust_score: number;
-  status: string;
-}
 
 export async function createUser(
   uid: string,
   username: string,
   passwordHash: string
-): Promise<ResultSetHeader> {
-  return query<ResultSetHeader>(
-    `INSERT INTO users (uid, username, password_hash, trust_score, status)
-     VALUES (?, ?, ?, 100.00, 'active')`,
-    [uid, username, passwordHash]
-  );
+) {
+  return prisma.user.create({
+    data: {
+      uid,
+      username,
+      password_hash: passwordHash,
+      trust_score: 100.00,
+      status: 'active',
+    },
+  });
 }
 
-export async function findUserByUsername(username: string): Promise<UserRow | null> {
-  const rows = await query<UserRow[]>(
-    'SELECT id, uid, username, password_hash, trust_score, status FROM users WHERE username = ?',
-    [username]
-  );
-  return rows.length > 0 ? rows[0] : null;
+export async function findUserByUsername(username: string) {
+  return prisma.user.findUnique({
+    where: { username },
+    select: { id: true, uid: true, username: true, password_hash: true, trust_score: true, status: true },
+  });
 }
 
-export async function findUserById(id: number): Promise<UserRow | null> {
-  const rows = await query<UserRow[]>(
-    'SELECT id, uid, username, password_hash, trust_score, status FROM users WHERE id = ?',
-    [id]
-  );
-  return rows.length > 0 ? rows[0] : null;
+export async function findUserById(id: number) {
+  return prisma.user.findUnique({
+    where: { id },
+    select: { id: true, uid: true, username: true, password_hash: true, trust_score: true, status: true },
+  });
 }
 
-export async function findUserByUid(uid: string): Promise<UserRow | null> {
-  const rows = await query<UserRow[]>(
-    'SELECT id, uid, username, password_hash, trust_score, status FROM users WHERE uid = ?',
-    [uid]
-  );
-  return rows.length > 0 ? rows[0] : null;
+export async function findUserByUid(uid: string) {
+  return prisma.user.findUnique({
+    where: { uid },
+    select: { id: true, uid: true, username: true, password_hash: true, trust_score: true, status: true },
+  });
 }
 
 export async function usernameExists(username: string): Promise<boolean> {
-  const rows = await query<RowDataPacket[]>(
-    'SELECT 1 FROM users WHERE username = ? LIMIT 1',
-    [username]
-  );
-  return rows.length > 0;
+  const user = await prisma.user.findUnique({
+    where: { username },
+    select: { id: true },
+  });
+  return user !== null;
 }
 
 // ─── Recovery Key Queries ────────────────────────────────────────────────────
 
-export interface RecoveryKeyRow extends RowDataPacket {
-  id: number;
-  user_id: number;
-  key_hash: string;
-  used: boolean;
-}
-
 export async function createRecoveryKey(
   userId: number,
   keyHash: string
-): Promise<ResultSetHeader> {
-  return query<ResultSetHeader>(
-    'INSERT INTO recovery_keys (user_id, key_hash, used) VALUES (?, ?, FALSE)',
-    [userId, keyHash]
-  );
+) {
+  return prisma.recoveryKey.create({
+    data: {
+      user_id: userId,
+      key_hash: keyHash,
+      is_active: true,
+    },
+  });
 }
 
-export async function getActiveRecoveryKeys(userId: number): Promise<RecoveryKeyRow[]> {
-  return query<RecoveryKeyRow[]>(
-    'SELECT id, user_id, key_hash, used FROM recovery_keys WHERE user_id = ? AND used = FALSE',
-    [userId]
-  );
+export async function getActiveRecoveryKeys(userId: number) {
+  return prisma.recoveryKey.findMany({
+    where: { user_id: userId, is_active: true },
+  });
 }
 
-export async function markRecoveryKeyUsed(keyId: number): Promise<ResultSetHeader> {
-  return query<ResultSetHeader>(
-    'UPDATE recovery_keys SET used = TRUE WHERE id = ?',
-    [keyId]
-  );
+export async function markRecoveryKeyUsed(keyId: number) {
+  return prisma.recoveryKey.update({
+    where: { id: keyId },
+    data: { is_active: false },
+  });
 }
 
 // ─── Refresh Token Queries ───────────────────────────────────────────────────
-
-export interface RefreshTokenRow extends RowDataPacket {
-  id: number;
-  user_id: number;
-  token_hash: string;
-  revoked: boolean;
-  expires_at: Date;
-}
 
 export async function createRefreshToken(
   userId: number,
   tokenHash: string,
   expiresAt: Date
-): Promise<ResultSetHeader> {
-  return query<ResultSetHeader>(
-    'INSERT INTO refresh_tokens (user_id, token_hash, revoked, expires_at) VALUES (?, ?, FALSE, ?)',
-    [userId, tokenHash, expiresAt]
-  );
+) {
+  return prisma.refreshToken.create({
+    data: {
+      user_id: userId,
+      token: tokenHash,
+      expires_at: expiresAt,
+    },
+  });
 }
 
-export async function findRefreshTokenByHash(tokenHash: string): Promise<RefreshTokenRow | null> {
-  const rows = await query<RefreshTokenRow[]>(
-    'SELECT id, user_id, token_hash, revoked, expires_at FROM refresh_tokens WHERE token_hash = ?',
-    [tokenHash]
-  );
-  return rows.length > 0 ? rows[0] : null;
+export async function findRefreshTokenByHash(tokenHash: string) {
+  return prisma.refreshToken.findUnique({
+    where: { token: tokenHash },
+  });
 }
 
-export async function revokeRefreshToken(tokenId: number): Promise<ResultSetHeader> {
-  return query<ResultSetHeader>(
-    'UPDATE refresh_tokens SET revoked = TRUE WHERE id = ?',
-    [tokenId]
-  );
+export async function revokeRefreshToken(tokenId: number) {
+  // We don't have a revoked column in Prisma schema, we just delete it.
+  // Alternatively, if we need it, we can delete the token.
+  return prisma.refreshToken.delete({
+    where: { id: tokenId },
+  });
 }
 
-export async function revokeAllUserRefreshTokens(userId: number): Promise<ResultSetHeader> {
-  return query<ResultSetHeader>(
-    'UPDATE refresh_tokens SET revoked = TRUE WHERE user_id = ?',
-    [userId]
-  );
+export async function revokeAllUserRefreshTokens(userId: number) {
+  return prisma.refreshToken.deleteMany({
+    where: { user_id: userId },
+  });
 }

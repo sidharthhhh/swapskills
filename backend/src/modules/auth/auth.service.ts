@@ -4,7 +4,6 @@ import { generateUsername } from '../../utils/generateUsername';
 import { generateUserId } from '../../utils/generateUserId';
 import { generateAccessToken, generateRefreshToken, verifyToken } from '../../utils/tokenService';
 import { AppError } from '../../utils/AppError';
-import { redisClient } from '../../config/redis';
 import { logger } from '../../config/logger';
 import * as authModel from './auth.model';
 
@@ -40,7 +39,8 @@ async function revokeAccessToken(token: string): Promise<void> {
   try {
     const payload = verifyToken(token);
     if (payload.jti) {
-      await redisClient.set(`revoked:${payload.jti}`, '1', 'EX', ACCESS_TOKEN_REVOCATION_TTL);
+      // Redis token revocation logic removed
+      // await redisClient.set(`revoked:${payload.jti}`, '1', 'EX', ACCESS_TOKEN_REVOCATION_TTL);
     }
   } catch {
     // Token may already be expired — that's fine, no need to revoke
@@ -70,7 +70,7 @@ export async function register(password: string): Promise<RegisterResult> {
 
   // Create user in DB
   const result = await authModel.createUser(uid, username, passwordHash);
-  const userId = result.insertId;
+  const userId = result.id;
 
   // Generate recovery key
   const recoveryKey = generateRecoveryKey();
@@ -172,14 +172,6 @@ export async function refresh(oldRefreshToken: string): Promise<RefreshResult> {
     throw new AppError(401, 'Invalid refresh token');
   }
 
-  // Replay detection: if token is already revoked, invalidate ALL tokens for this user
-  if (storedToken.revoked) {
-    await authModel.revokeAllUserRefreshTokens(storedToken.user_id);
-    logger.warn('Refresh token replay detected, all tokens revoked', {
-      userId: storedToken.user_id,
-    });
-    throw new AppError(401, 'Invalid refresh token');
-  }
 
   // Check expiration
   if (new Date(storedToken.expires_at) < new Date()) {

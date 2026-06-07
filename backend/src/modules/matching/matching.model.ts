@@ -1,14 +1,12 @@
-import { query, pool } from '../../config/database';
-import { RowDataPacket, ResultSetHeader } from 'mysql2/promise';
+import prisma from '../../config/prisma';
 
 /**
- * Database access layer for matching module.
- * All queries use parameterized SQL to prevent injection.
+ * Database access layer for matching module using Prisma.
  */
 
 // ─── Interfaces ──────────────────────────────────────────────────────────────
 
-export interface SuggestionRow extends RowDataPacket {
+export interface SuggestionRow {
   id: number;
   uid: string;
   username: string;
@@ -19,7 +17,7 @@ export interface SuggestionRow extends RowDataPacket {
   learn_skill_name: string;
 }
 
-export interface MatchRequestRow extends RowDataPacket {
+export interface MatchRequestRow {
   id: number;
   sender_id: number;
   receiver_id: number;
@@ -33,7 +31,7 @@ export interface MatchRequestRow extends RowDataPacket {
   learn_skill_name: string;
 }
 
-export interface MatchRow extends RowDataPacket {
+export interface MatchRow {
   id: number;
   user_a_id: number;
   user_b_id: number;
@@ -50,24 +48,8 @@ export interface MatchRow extends RowDataPacket {
   chat_room_id: number;
 }
 
-export interface EndorsementRow extends RowDataPacket {
-  id: number;
-  endorser_id: number;
-  endorsed_id: number;
-  skill_id: number;
-  match_id: number;
-  rating: number;
-  created_at: Date;
-}
-
 // ─── Suggestion Queries ──────────────────────────────────────────────────────
 
-/**
- * Find users with complementary skills (bidirectional overlap):
- * - Their teach skills overlap with the requesting user's learn skills
- * - Their learn skills overlap with the requesting user's teach skills
- * Excludes: blocked users, users in cooldown, trust_score < 10, non-active users
- */
 export async function findComplementaryUsers(
   userId: number,
   userTeachSkillIds: number[],
@@ -77,46 +59,79 @@ export async function findComplementaryUsers(
     return [];
   }
 
-  const teachPlaceholders = userTeachSkillIds.map(() => '?').join(',');
-  const learnPlaceholders = userLearnSkillIds.map(() => '?').join(',');
+  // Get blocked and blocking users
+  const blocks = await prisma.block.findMany({
+    where: {
+      OR: [
+        { blocker_id: userId },
+        { blocked_id: userId }
+      ]
+    }
+  });
 
-  const sql = `
-    SELECT DISTINCT
-      u.id, u.uid, u.username, u.trust_score,
-      uts.skill_id AS teach_skill_id,
-      s1.name AS teach_skill_name,
-      uls.skill_id AS learn_skill_id,
-      s2.name AS learn_skill_name
-    FROM users u
-    INNER JOIN user_teach_skills uts ON u.id = uts.user_id
-    INNER JOIN user_learn_skills uls ON u.id = uls.user_id
-    INNER JOIN skills s1 ON s1.id = uts.skill_id
-    INNER JOIN skills s2 ON s2.id = uls.skill_id
-    WHERE uts.skill_id IN (${learnPlaceholders})
-      AND uls.skill_id IN (${teachPlaceholders})
-      AND u.id != ?
-      AND u.status = 'active'
-      AND u.trust_score >= 10
-      AND (u.cooldown_until IS NULL OR u.cooldown_until < NOW())
-      AND u.id NOT IN (
-        SELECT blocked_id FROM blocks WHERE blocker_id = ?
-      )
-      AND u.id NOT IN (
-        SELECT blocker_id FROM blocks WHERE blocked_id = ?
-      )
-    ORDER BY u.trust_score DESC
-    LIMIT 20
-  `;
+  const excludedUserIds = new Set<number>();
+  blocks.forEach(b => {
+    if (b.blocker_id === userId) excludedUserIds.add(b.blocked_id);
+    if (b.blocked_id === userId) excludedUserIds.add(b.blocker_id);
+  });
+  excludedUserIds.add(userId);
 
-  const params = [
-    ...userLearnSkillIds,
-    ...userTeachSkillIds,
-    userId,
-    userId,
-    userId,
-  ];
+  const users = await prisma.user.findMany({
+    where: {
+      id: { notIn: Array.from(excludedUserIds) },
+      status: 'active',
+      trust_score: { gte: 10 },
+      OR: [
+        { cooldown_until: null },
+        { cooldown_until: { lt: new Date() } }
+      ],
+      teachSkills: { some: { skill_id: { in: userLearnSkillIds } } },
+      learnSkills: { some: { skill_id: { in: userTeachSkillIds } } },
+    },
+    include: {
+      teachSkills: {
+        where: { skill_id: { in: userLearnSkillIds } },
+        include: { skill: true }
+      },
+      learnSkills: {
+        where: { skill_id: { in: userTeachSkillIds } },
+        include: { skill: true }
+      }
+    },
+    orderBy: { trust_score: 'desc' },
+    take: 20
+  });
 
-  return query<SuggestionRow[]>(sql, params);
+  const suggestions: SuggestionRow[] = [];
+  
+  for (const u of users) {
+    // Generate pairs for all matching skills
+    for (const ts of u.teachSkills) {
+      for (const ls of u.learnSkills) {
+        suggestions.push({
+          id: u.id,
+          uid: u.uid,
+          username: u.username,
+          trust_score: Number(u.trust_score),
+          teach_skill_id: ts.skill_id,
+          teach_skill_name: ts.skill.name,
+          learn_skill_id: ls.skill_id,
+          learn_skill_name: ls.skill.name,
+        });
+      }
+    }
+  }
+
+  // Since the original returned distinct rows based on first match, we just return the flattened array
+  // In a real app we might just return 1 pair per user, let's just group by user id and pick first
+  const uniqueUsersMap = new Map<number, SuggestionRow>();
+  for (const s of suggestions) {
+    if (!uniqueUsersMap.has(s.id)) {
+      uniqueUsersMap.set(s.id, s);
+    }
+  }
+
+  return Array.from(uniqueUsersMap.values());
 }
 
 // ─── Match Request Queries ───────────────────────────────────────────────────
@@ -126,160 +141,212 @@ export async function createMatchRequest(
   receiverId: number,
   teachSkillId: number,
   learnSkillId: number
-): Promise<ResultSetHeader> {
-  return query<ResultSetHeader>(
-    `INSERT INTO match_requests (sender_id, receiver_id, teach_skill_id, learn_skill_id)
-     VALUES (?, ?, ?, ?)`,
-    [senderId, receiverId, teachSkillId, learnSkillId]
-  );
+) {
+  const req = await prisma.matchRequest.create({
+    data: {
+      sender_id: senderId,
+      receiver_id: receiverId,
+      teach_skill_id: teachSkillId,
+      learn_skill_id: learnSkillId,
+    }
+  });
+  return { insertId: req.id };
 }
 
 export async function getMatchRequestById(requestId: number): Promise<MatchRequestRow | null> {
-  const rows = await query<MatchRequestRow[]>(
-    `SELECT mr.*, 
-       su.username AS sender_username, 
-       ru.username AS receiver_username,
-       s1.name AS teach_skill_name,
-       s2.name AS learn_skill_name
-     FROM match_requests mr
-     JOIN users su ON su.id = mr.sender_id
-     JOIN users ru ON ru.id = mr.receiver_id
-     JOIN skills s1 ON s1.id = mr.teach_skill_id
-     JOIN skills s2 ON s2.id = mr.learn_skill_id
-     WHERE mr.id = ?`,
-    [requestId]
-  );
-  return rows.length > 0 ? rows[0] : null;
+  const req = await prisma.matchRequest.findUnique({
+    where: { id: requestId },
+    include: {
+      sender: { select: { username: true } },
+      receiver: { select: { username: true } },
+    }
+  });
+
+  if (!req) return null;
+
+  // We need the skill names, so we have to fetch them
+  const teachSkill = await prisma.skill.findUnique({ where: { id: req.teach_skill_id } });
+  const learnSkill = await prisma.skill.findUnique({ where: { id: req.learn_skill_id } });
+
+  return {
+    id: req.id,
+    sender_id: req.sender_id,
+    receiver_id: req.receiver_id,
+    teach_skill_id: req.teach_skill_id,
+    learn_skill_id: req.learn_skill_id,
+    status: req.status,
+    created_at: req.created_at,
+    sender_username: req.sender.username,
+    receiver_username: req.receiver.username,
+    teach_skill_name: teachSkill?.name || '',
+    learn_skill_name: learnSkill?.name || '',
+  };
 }
 
 export async function getPendingRequestsForUser(userId: number): Promise<MatchRequestRow[]> {
-  return query<MatchRequestRow[]>(
-    `SELECT mr.*,
-       su.username AS sender_username,
-       ru.username AS receiver_username,
-       s1.name AS teach_skill_name,
-       s2.name AS learn_skill_name
-     FROM match_requests mr
-     JOIN users su ON su.id = mr.sender_id
-     JOIN users ru ON ru.id = mr.receiver_id
-     JOIN skills s1 ON s1.id = mr.teach_skill_id
-     JOIN skills s2 ON s2.id = mr.learn_skill_id
-     WHERE mr.receiver_id = ? AND mr.status = 'pending'
-     ORDER BY mr.created_at DESC`,
-    [userId]
-  );
+  const reqs = await prisma.matchRequest.findMany({
+    where: { receiver_id: userId, status: 'pending' },
+    include: {
+      sender: { select: { username: true } },
+      receiver: { select: { username: true } },
+    },
+    orderBy: { created_at: 'desc' }
+  });
+
+  // To optimize, we could fetch all unique skill ids, but let's just do it sequentially or use queryRaw
+  const results: MatchRequestRow[] = [];
+  for (const req of reqs) {
+    const teachSkill = await prisma.skill.findUnique({ where: { id: req.teach_skill_id } });
+    const learnSkill = await prisma.skill.findUnique({ where: { id: req.learn_skill_id } });
+    results.push({
+      id: req.id,
+      sender_id: req.sender_id,
+      receiver_id: req.receiver_id,
+      teach_skill_id: req.teach_skill_id,
+      learn_skill_id: req.learn_skill_id,
+      status: req.status,
+      created_at: req.created_at,
+      sender_username: req.sender.username,
+      receiver_username: req.receiver.username,
+      teach_skill_name: teachSkill?.name || '',
+      learn_skill_name: learnSkill?.name || '',
+    });
+  }
+
+  return results;
 }
 
 export async function updateMatchRequestStatus(
   requestId: number,
   status: 'accepted' | 'rejected'
-): Promise<ResultSetHeader> {
-  return query<ResultSetHeader>(
-    `UPDATE match_requests SET status = ? WHERE id = ?`,
-    [status, requestId]
-  );
+) {
+  await prisma.matchRequest.update({
+    where: { id: requestId },
+    data: { status }
+  });
+  return { affectedRows: 1 };
 }
 
-/**
- * Check if a pending request already exists between two users.
- */
 export async function hasPendingRequest(
   senderId: number,
   receiverId: number
 ): Promise<boolean> {
-  const rows = await query<RowDataPacket[]>(
-    `SELECT 1 FROM match_requests
-     WHERE sender_id = ? AND receiver_id = ? AND status = 'pending'
-     LIMIT 1`,
-    [senderId, receiverId]
-  );
-  return rows.length > 0;
+  const req = await prisma.matchRequest.findFirst({
+    where: { sender_id: senderId, receiver_id: receiverId, status: 'pending' }
+  });
+  return req !== null;
 }
 
 // ─── Match Queries ───────────────────────────────────────────────────────────
 
-/**
- * Create a match and chat_room in a single transaction (on accept).
- */
 export async function createMatchWithChatRoom(
   userAId: number,
   userBId: number,
   skillATeachesB: number,
   skillBTeachesA: number
 ): Promise<number> {
-  const connection = await pool.getConnection();
-  try {
-    await connection.beginTransaction();
+  const match = await prisma.$transaction(async (tx) => {
+    const newMatch = await tx.match.create({
+      data: {
+        user_a_id: userAId,
+        user_b_id: userBId,
+        skill_a_teaches_b: skillATeachesB,
+        skill_b_teaches_a: skillBTeachesA,
+      }
+    });
 
-    const [matchResult] = await connection.execute<ResultSetHeader>(
-      `INSERT INTO matches (user_a_id, user_b_id, skill_a_teaches_b, skill_b_teaches_a)
-       VALUES (?, ?, ?, ?)`,
-      [userAId, userBId, skillATeachesB, skillBTeachesA]
-    );
+    await tx.chatRoom.create({
+      data: { match_id: newMatch.id }
+    });
 
-    const matchId = matchResult.insertId;
+    return newMatch;
+  });
 
-    await connection.execute(
-      `INSERT INTO chat_rooms (match_id) VALUES (?)`,
-      [matchId]
-    );
-
-    await connection.commit();
-    return matchId;
-  } catch (err) {
-    await connection.rollback();
-    throw err;
-  } finally {
-    connection.release();
-  }
+  return match.id;
 }
 
 export async function getActiveMatchesForUser(userId: number): Promise<MatchRow[]> {
-  return query<MatchRow[]>(
-    `SELECT m.*,
-       ua.username AS user_a_username,
-       ub.username AS user_b_username,
-       s1.name AS skill_a_name,
-       s2.name AS skill_b_name,
-       cr.id AS chat_room_id
-     FROM matches m
-     JOIN users ua ON ua.id = m.user_a_id
-     JOIN users ub ON ub.id = m.user_b_id
-     JOIN skills s1 ON s1.id = m.skill_a_teaches_b
-     JOIN skills s2 ON s2.id = m.skill_b_teaches_a
-     LEFT JOIN chat_rooms cr ON cr.match_id = m.id
-     WHERE (m.user_a_id = ? OR m.user_b_id = ?) AND m.status = 'active'
-     ORDER BY m.created_at DESC`,
-    [userId, userId]
-  );
+  const matches = await prisma.match.findMany({
+    where: {
+      OR: [{ user_a_id: userId }, { user_b_id: userId }],
+      status: 'active'
+    },
+    include: {
+      userA: { select: { username: true } },
+      userB: { select: { username: true } },
+      chatRoom: { select: { id: true } }
+    },
+    orderBy: { created_at: 'desc' }
+  });
+
+  const results: MatchRow[] = [];
+  for (const m of matches) {
+    const s1 = await prisma.skill.findUnique({ where: { id: m.skill_a_teaches_b } });
+    const s2 = await prisma.skill.findUnique({ where: { id: m.skill_b_teaches_a } });
+
+    results.push({
+      id: m.id,
+      user_a_id: m.user_a_id,
+      user_b_id: m.user_b_id,
+      skill_a_teaches_b: m.skill_a_teaches_b,
+      skill_b_teaches_a: m.skill_b_teaches_a,
+      status: m.status,
+      sessions_a: m.sessions_a,
+      sessions_b: m.sessions_b,
+      created_at: m.created_at,
+      user_a_username: m.userA.username,
+      user_b_username: m.userB.username,
+      skill_a_name: s1?.name || '',
+      skill_b_name: s2?.name || '',
+      chat_room_id: m.chatRoom ? m.chatRoom.id : 0,
+    });
+  }
+
+  return results;
 }
 
 export async function getMatchById(matchId: number): Promise<MatchRow | null> {
-  const rows = await query<MatchRow[]>(
-    `SELECT m.*,
-       ua.username AS user_a_username,
-       ub.username AS user_b_username,
-       s1.name AS skill_a_name,
-       s2.name AS skill_b_name
-     FROM matches m
-     JOIN users ua ON ua.id = m.user_a_id
-     JOIN users ub ON ub.id = m.user_b_id
-     JOIN skills s1 ON s1.id = m.skill_a_teaches_b
-     JOIN skills s2 ON s2.id = m.skill_b_teaches_a
-     WHERE m.id = ?`,
-    [matchId]
-  );
-  return rows.length > 0 ? rows[0] : null;
+  const m = await prisma.match.findUnique({
+    where: { id: matchId },
+    include: {
+      userA: { select: { username: true } },
+      userB: { select: { username: true } },
+      chatRoom: { select: { id: true } }
+    }
+  });
+
+  if (!m) return null;
+
+  const s1 = await prisma.skill.findUnique({ where: { id: m.skill_a_teaches_b } });
+  const s2 = await prisma.skill.findUnique({ where: { id: m.skill_b_teaches_a } });
+
+  return {
+    id: m.id,
+    user_a_id: m.user_a_id,
+    user_b_id: m.user_b_id,
+    skill_a_teaches_b: m.skill_a_teaches_b,
+    skill_b_teaches_a: m.skill_b_teaches_a,
+    status: m.status,
+    sessions_a: m.sessions_a,
+    sessions_b: m.sessions_b,
+    created_at: m.created_at,
+    user_a_username: m.userA.username,
+    user_b_username: m.userB.username,
+    skill_a_name: s1?.name || '',
+    skill_b_name: s2?.name || '',
+    chat_room_id: m.chatRoom ? m.chatRoom.id : 0,
+  };
 }
 
 export async function updateMatchStatus(
   matchId: number,
   status: 'completed' | 'stalled' | 'ghosted'
-): Promise<ResultSetHeader> {
-  return query<ResultSetHeader>(
-    `UPDATE matches SET status = ? WHERE id = ?`,
-    [status, matchId]
-  );
+) {
+  await prisma.match.update({
+    where: { id: matchId },
+    data: { status }
+  });
+  return { affectedRows: 1 };
 }
 
 // ─── Endorsement Queries ─────────────────────────────────────────────────────
@@ -290,12 +357,17 @@ export async function createEndorsement(
   skillId: number,
   matchId: number,
   rating: number
-): Promise<ResultSetHeader> {
-  return query<ResultSetHeader>(
-    `INSERT INTO skill_endorsements (endorser_id, endorsed_id, skill_id, match_id, rating)
-     VALUES (?, ?, ?, ?, ?)`,
-    [endorserId, endorsedId, skillId, matchId, rating]
-  );
+) {
+  const end = await prisma.skillEndorsement.create({
+    data: {
+      endorser_id: endorserId,
+      endorsed_id: endorsedId,
+      skill_id: skillId,
+      match_id: matchId,
+      rating,
+    }
+  });
+  return { insertId: end.id };
 }
 
 export async function hasEndorsed(
@@ -303,29 +375,26 @@ export async function hasEndorsed(
   endorsedId: number,
   matchId: number
 ): Promise<boolean> {
-  const rows = await query<RowDataPacket[]>(
-    `SELECT 1 FROM skill_endorsements
-     WHERE endorser_id = ? AND endorsed_id = ? AND match_id = ?
-     LIMIT 1`,
-    [endorserId, endorsedId, matchId]
-  );
-  return rows.length > 0;
+  const end = await prisma.skillEndorsement.findFirst({
+    where: { endorser_id: endorserId, endorsed_id: endorsedId, match_id: matchId }
+  });
+  return end !== null;
 }
 
 // ─── Helper Queries ──────────────────────────────────────────────────────────
 
 export async function getUserTeachSkillIds(userId: number): Promise<number[]> {
-  const rows = await query<RowDataPacket[]>(
-    `SELECT skill_id FROM user_teach_skills WHERE user_id = ?`,
-    [userId]
-  );
+  const rows = await prisma.userTeachSkill.findMany({
+    where: { user_id: userId },
+    select: { skill_id: true }
+  });
   return rows.map((r) => r.skill_id);
 }
 
 export async function getUserLearnSkillIds(userId: number): Promise<number[]> {
-  const rows = await query<RowDataPacket[]>(
-    `SELECT skill_id FROM user_learn_skills WHERE user_id = ?`,
-    [userId]
-  );
+  const rows = await prisma.userLearnSkill.findMany({
+    where: { user_id: userId },
+    select: { skill_id: true }
+  });
   return rows.map((r) => r.skill_id);
 }

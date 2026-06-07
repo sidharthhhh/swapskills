@@ -1,2 +1,0 @@
-DROP TABLE IF EXISTS blocks;
-DROP TABLE IF EXISTS reports;

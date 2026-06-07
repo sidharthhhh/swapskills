@@ -10,12 +10,14 @@
     "migrate:up": "db-migrate up --migrations-dir ./database/migrations",
     "migrate:down": "db-migrate down --migrations-dir ./database/migrations",
     "migrate:create": "db-migrate create --migrations-dir ./database/migrations",
-    "seed": "node database/seed.js"
+    "seed": "ts-node prisma/seed.ts"
   },
   "keywords": [],
   "author": "",
   "license": "ISC",
   "dependencies": {
+    "@prisma/adapter-pg": "^7.8.0",
+    "@prisma/client": "^7.8.0",
     "@types/multer": "^2.1.0",
     "bcrypt": "^6.0.0",
     "cors": "^2.8.6",
@@ -27,9 +29,10 @@
     "helmet": "^8.2.0",
     "hpp": "^0.2.3",
     "ioredis": "^5.11.0",
+    "ioredis-mock": "^8.13.1",
     "jsonwebtoken": "^9.0.3",
     "multer": "^2.1.1",
-    "mysql2": "^3.22.4",
+    "pg": "^8.21.0",
     "rate-limit-redis": "^5.0.0",
     "socket.io": "^4.8.3",
     "uuid": "^14.0.0",
@@ -43,8 +46,10 @@
     "@types/hpp": "^0.2.6",
     "@types/jsonwebtoken": "^9.0.9",
     "@types/node": "^22.15.0",
+    "@types/pg": "^8.20.0",
     "@types/uuid": "^10.0.0",
     "nodemon": "^3.1.9",
+    "prisma": "^7.8.0",
     "ts-node": "^10.9.2",
     "typescript": "^5.7.3"
   }
