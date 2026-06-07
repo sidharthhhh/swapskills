@@ -89,13 +89,13 @@ export default function MatchTable({ matches, isLoading }: MatchTableProps) {
               className="border-b border-gray-100 dark:border-gray-800 hover:bg-gray-50 dark:hover:bg-gray-800/50"
             >
               <td className="px-4 py-3 text-gray-900 dark:text-white">
-                <span className="font-medium">{match.user_a_username || match.user1_username}</span>
+                <span className="font-medium">{match.user1_username}</span>
                 <span className="text-gray-400 mx-1">↔</span>
-                <span className="font-medium">{match.user_b_username || match.user2_username}</span>
+                <span className="font-medium">{match.user2_username}</span>
               </td>
               <td className="px-4 py-3 text-gray-600 dark:text-gray-400">
                 <div className="flex flex-wrap gap-1">
-                  {(match.skills ?? [match.skill_a_name, match.skill_b_name].filter(Boolean)).slice(0, 3).map((skill: string, idx: number) => (
+                  {(match.skills ?? []).slice(0, 3).map((skill: string, idx: number) => (
                     <span
                       key={idx}
                       className="px-1.5 py-0.5 text-xs bg-gray-100 dark:bg-gray-700 rounded"

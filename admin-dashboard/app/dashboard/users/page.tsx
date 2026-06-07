@@ -186,7 +186,7 @@ export default function UsersPage() {
           >
             <Eye className="w-4 h-4" />
           </button>
-          {!row.is_banned && (
+          {row.status !== 'banned' && (
             <button
               onClick={() => openAction(row, 'suspend')}
               className="p-1.5 text-gray-500 hover:text-yellow-600 dark:hover:text-yellow-400 hover:bg-gray-100 dark:hover:bg-gray-700 rounded-lg transition-colors"
@@ -195,7 +195,7 @@ export default function UsersPage() {
               <ShieldOff className="w-4 h-4" />
             </button>
           )}
-          {!row.is_banned && (
+          {row.status !== 'banned' && (
             <button
               onClick={() => openAction(row, 'ban')}
               className="p-1.5 text-gray-500 hover:text-red-600 dark:hover:text-red-400 hover:bg-gray-100 dark:hover:bg-gray-700 rounded-lg transition-colors"

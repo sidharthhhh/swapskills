@@ -100,7 +100,7 @@ export default function MatchDetailPage() {
           <div className="flex items-center gap-3">
             <Users className="w-5 h-5 text-gray-500" />
             <h1 className="text-xl font-bold text-gray-900 dark:text-white">
-              {match.user_a_username || match.user1_username} <span className="text-gray-400">↔</span> {match.user_b_username || match.user2_username}
+              {match.user1_username} <span className="text-gray-400">↔</span> {match.user2_username}
             </h1>
           </div>
           <span className={cn('px-3 py-1 text-sm font-medium rounded-full', STATUS_STYLES[match.status])}>
@@ -108,7 +108,7 @@ export default function MatchDetailPage() {
           </span>
         </div>
         <div className="flex flex-wrap gap-2 mb-2">
-          {(match.skills ?? [match.skill_a_name, match.skill_b_name].filter(Boolean)).map((skill: string, idx: number) => (
+          {(match.skills ?? []).map((skill: string, idx: number) => (
             <span key={idx} className="px-2 py-1 text-xs bg-gray-100 dark:bg-gray-700 rounded text-gray-600 dark:text-gray-400">
               {skill}
             </span>

@@ -1,8 +1,8 @@
 'use client';
 
 import {
-  LineChart,
-  Line,
+  AreaChart,
+  Area,
   XAxis,
   YAxis,
   CartesianGrid,
@@ -21,40 +21,56 @@ interface DauChartProps {
 
 export default function DauChart({ data }: DauChartProps) {
   return (
-    <div className="bg-white dark:bg-gray-800 rounded-xl border border-gray-200 dark:border-gray-700 p-6">
-      <h3 className="text-sm font-semibold text-gray-900 dark:text-white mb-4">
+    <div className="glass-panel rounded-xl p-6 flex flex-col h-full">
+      <h3 className="text-base font-bold text-slate-900 dark:text-white mb-5">
         Daily Active Users (30 days)
       </h3>
-      <div className="h-64">
+      <div className="h-64 flex-1">
         <ResponsiveContainer width="100%" height="100%">
-          <LineChart data={data} margin={{ top: 5, right: 20, left: 0, bottom: 5 }}>
-            <CartesianGrid strokeDasharray="3 3" className="stroke-gray-200 dark:stroke-gray-700" />
+          <AreaChart data={data} margin={{ top: 5, right: 20, left: 0, bottom: 5 }}>
+            <defs>
+              <linearGradient id="colorCount" x1="0" y1="0" x2="0" y2="1">
+                <stop offset="5%" stopColor="#8b5cf6" stopOpacity={0.3}/>
+                <stop offset="95%" stopColor="#8b5cf6" stopOpacity={0}/>
+              </linearGradient>
+            </defs>
+            <CartesianGrid strokeDasharray="3 3" vertical={false} className="stroke-slate-200 dark:stroke-slate-700/50" />
             <XAxis
               dataKey="date"
-              tick={{ fontSize: 12 }}
-              className="text-gray-500 dark:text-gray-400"
+              axisLine={false}
+              tickLine={false}
+              tick={{ fontSize: 12, fill: '#64748b' }}
+              dy={10}
             />
             <YAxis
-              tick={{ fontSize: 12 }}
-              className="text-gray-500 dark:text-gray-400"
+              axisLine={false}
+              tickLine={false}
+              tick={{ fontSize: 12, fill: '#64748b' }}
+              dx={-10}
             />
             <Tooltip
               contentStyle={{
-                backgroundColor: 'var(--tooltip-bg, #fff)',
-                border: '1px solid var(--tooltip-border, #e5e7eb)',
-                borderRadius: '8px',
+                backgroundColor: 'rgba(15, 23, 42, 0.8)',
+                backdropFilter: 'blur(12px)',
+                border: '1px solid rgba(255,255,255,0.1)',
+                borderRadius: '12px',
+                color: '#fff',
                 fontSize: '12px',
+                fontWeight: '600',
+                boxShadow: '0 4px 6px -1px rgba(0, 0, 0, 0.1)',
               }}
+              itemStyle={{ color: '#c4b5fd' }}
             />
-            <Line
+            <Area
               type="monotone"
               dataKey="count"
-              stroke="#3b82f6"
-              strokeWidth={2}
-              dot={false}
-              activeDot={{ r: 4 }}
+              stroke="#8b5cf6"
+              strokeWidth={3}
+              fillOpacity={1}
+              fill="url(#colorCount)"
+              activeDot={{ r: 6, strokeWidth: 0, fill: '#8b5cf6' }}
             />
-          </LineChart>
+          </AreaChart>
         </ResponsiveContainer>
       </div>
     </div>

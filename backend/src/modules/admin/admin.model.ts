@@ -96,11 +96,11 @@ export async function getUsers(filters: UserListFilters) {
     }),
   ]);
 
-  return { users, total, page, limit };
+  return { users: users.map(user => ({ ...user, trust_score: Number(user.trust_score) })), total, page, limit };
 }
 
 export async function getUserById(userId: number) {
-  return prisma.user.findUnique({
+  const user = await prisma.user.findUnique({
     where: { id: userId },
     select: {
       id: true,
@@ -113,6 +113,7 @@ export async function getUserById(userId: number) {
       updated_at: true,
     },
   });
+  return user ? { ...user, trust_score: Number(user.trust_score) } : null;
 }
 
 export async function getUserReputationHistory(userId: number) {
@@ -124,7 +125,7 @@ export async function getUserReputationHistory(userId: number) {
 }
 
 export async function updateUserStatus(userId: number, status: string, reason: string) {
-  const updated = await prisma.user.update({
+  await prisma.user.update({
     where: { id: userId },
     data: { status },
   });
@@ -162,17 +163,51 @@ export async function getMatches(filters: MatchListFilters) {
     }),
   ]);
 
-  return { matches, total, page, limit };
+  const skillIds = new Set<number>();
+  for (const match of matches) {
+    skillIds.add(match.skill_a_teaches_b);
+    skillIds.add(match.skill_b_teaches_a);
+  }
+
+  const skills = await prisma.skill.findMany({
+    where: { id: { in: Array.from(skillIds) } },
+    select: { id: true, name: true }
+  });
+  const skillMap = new Map(skills.map(skill => [skill.id, skill.name]));
+
+  const mappedMatches = matches.map(entry => ({
+    ...entry,
+    user1_username: entry.userA.username,
+    user2_username: entry.userB.username,
+    skills: [skillMap.get(entry.skill_a_teaches_b) || 'Unknown', skillMap.get(entry.skill_b_teaches_a) || 'Unknown'],
+  }));
+
+  return { matches: mappedMatches, total, page, limit };
 }
 
 export async function getMatchById(matchId: number) {
-  return prisma.match.findUnique({
+  const match = await prisma.match.findUnique({
     where: { id: matchId },
     include: {
       userA: { select: { username: true } },
       userB: { select: { username: true } },
     },
   });
+
+  if (!match) return null;
+
+  const skills = await prisma.skill.findMany({
+    where: { id: { in: [match.skill_a_teaches_b, match.skill_b_teaches_a] } },
+    select: { id: true, name: true }
+  });
+  const skillMap = new Map(skills.map(skill => [skill.id, skill.name]));
+
+  return {
+    ...match,
+    user1_username: match.userA.username,
+    user2_username: match.userB.username,
+    skills: [skillMap.get(match.skill_a_teaches_b) || 'Unknown', skillMap.get(match.skill_b_teaches_a) || 'Unknown'],
+  };
 }
 
 export async function getMatchChatSummary(matchId: number) {
@@ -284,26 +319,29 @@ export async function removePost(postId: number) {
 
 export async function getSkillsAnalytics() {
   const skills = await prisma.skill.findMany({
-    include: {
+    select: {
+      id: true,
+      name: true,
+      category: true,
       _count: { select: { teachSkills: true, learnSkills: true } },
     },
   });
 
-  return skills.map((s: any) => ({
-    id: s.id,
-    name: s.name,
-    category: s.category,
-    supply: s._count.teachSkills,
-    demand: s._count.learnSkills,
-  })).sort((a: any, b: any) => b.demand - a.demand);
+  return skills.map(skill => ({
+    id: skill.id,
+    name: skill.name,
+    category: skill.category,
+    supply: skill._count.teachSkills,
+    demand: skill._count.learnSkills,
+  })).sort((first, second) => second.demand - first.demand);
 }
 
 export async function getTrendingSkills() {
   const skills = await getSkillsAnalytics();
   return skills
-    .map((s: any) => ({ ...s, activity_count: s.supply + s.demand }))
-    .filter((s: any) => s.activity_count > 0)
-    .sort((a: any, b: any) => b.activity_count - a.activity_count)
+    .map(skill => ({ ...skill, activity_count: skill.supply + skill.demand }))
+    .filter(skill => skill.activity_count > 0)
+    .sort((first, second) => second.activity_count - first.activity_count)
     .slice(0, 20);
 }
 
@@ -311,10 +349,11 @@ export async function getTrendingSkills() {
 
 export async function getReputationOutliers() {
   // Using a simpler Prisma query since complex subqueries are harder. We fetch users with low scores.
-  return prisma.user.findMany({
+  const users = await prisma.user.findMany({
     where: { trust_score: { lt: 50 } },
     orderBy: { trust_score: 'asc' },
   });
+  return users.map(user => ({ ...user, trust_score: Number(user.trust_score) }));
 }
 
 // ─── Audit Log ────────────────────────────────────────────────────────────────
@@ -353,7 +392,7 @@ export async function getAuditLog(filters: AuditLogFilters) {
     }),
   ]);
 
-  return { entries: entries.map(e => ({ ...e, id: Number(e.id) })), total, page, limit };
+  return { entries: entries.map(entry => ({ ...entry, id: Number(entry.id) })), total, page, limit };
 }
 
 export async function recordAuditLog(

@@ -2,7 +2,7 @@
 
 import { useQuery } from '@tanstack/react-query';
 import { useSession } from 'next-auth/react';
-import { Users, Handshake, CheckCircle, AlertTriangle } from 'lucide-react';
+import { Users, Handshake, CheckCircle, AlertTriangle, TrendingUp } from 'lucide-react';
 import api from '@/lib/api';
 import DauChart from '@/components/charts/DauChart';
 import MatchFunnelChart from '@/components/charts/MatchFunnelChart';
@@ -45,29 +45,32 @@ interface TrendingSkill {
 
 function MetricCardSkeleton() {
   return (
-    <div className="bg-white dark:bg-gray-800 rounded-xl border border-gray-200 dark:border-gray-700 p-6 animate-pulse">
-      <div className="h-4 bg-gray-200 dark:bg-gray-700 rounded w-1/2 mb-3" />
-      <div className="h-8 bg-gray-200 dark:bg-gray-700 rounded w-1/3 mb-2" />
-      <div className="h-3 bg-gray-200 dark:bg-gray-700 rounded w-2/3" />
+    <div className="glass-panel rounded-xl p-6 relative overflow-hidden">
+      <div className="absolute inset-0 bg-gradient-to-r from-transparent via-white/10 to-transparent animate-shimmer" />
+      <div className="h-4 bg-slate-200/50 dark:bg-slate-700/50 rounded w-1/2 mb-3" />
+      <div className="h-8 bg-slate-200/50 dark:bg-slate-700/50 rounded w-1/3 mb-2" />
+      <div className="h-3 bg-slate-200/50 dark:bg-slate-700/50 rounded w-2/3" />
     </div>
   );
 }
 
 function ChartSkeleton() {
   return (
-    <div className="bg-white dark:bg-gray-800 rounded-xl border border-gray-200 dark:border-gray-700 p-6 animate-pulse">
-      <div className="h-4 bg-gray-200 dark:bg-gray-700 rounded w-1/3 mb-4" />
-      <div className="h-64 bg-gray-200 dark:bg-gray-700 rounded" />
+    <div className="glass-panel rounded-xl p-6 relative overflow-hidden">
+      <div className="absolute inset-0 bg-gradient-to-r from-transparent via-white/10 to-transparent animate-shimmer" />
+      <div className="h-4 bg-slate-200/50 dark:bg-slate-700/50 rounded w-1/3 mb-4" />
+      <div className="h-64 bg-slate-200/50 dark:bg-slate-700/50 rounded" />
     </div>
   );
 }
 
 function TableSkeleton() {
   return (
-    <div className="bg-white dark:bg-gray-800 rounded-xl border border-gray-200 dark:border-gray-700 p-6 animate-pulse">
-      <div className="h-4 bg-gray-200 dark:bg-gray-700 rounded w-1/3 mb-4" />
+    <div className="glass-panel rounded-xl p-6 relative overflow-hidden">
+      <div className="absolute inset-0 bg-gradient-to-r from-transparent via-white/10 to-transparent animate-shimmer" />
+      <div className="h-4 bg-slate-200/50 dark:bg-slate-700/50 rounded w-1/3 mb-4" />
       {Array.from({ length: 5 }).map((_, i) => (
-        <div key={i} className="h-8 bg-gray-200 dark:bg-gray-700 rounded mb-2" />
+        <div key={i} className="h-8 bg-slate-200/50 dark:bg-slate-700/50 rounded mb-2" />
       ))}
     </div>
   );
@@ -211,17 +214,17 @@ export default function DashboardOverviewPage() {
               return (
                 <div
                   key={card.label}
-                  className="bg-white dark:bg-gray-800 rounded-xl border border-gray-200 dark:border-gray-700 p-6"
+                  className="glass-panel rounded-xl p-6 group cursor-default"
                 >
                   <div className="flex items-center justify-between mb-3">
-                    <span className="text-sm font-medium text-gray-500 dark:text-gray-400">
+                    <span className="text-sm font-semibold text-slate-500 dark:text-slate-400 group-hover:text-slate-700 dark:group-hover:text-slate-300 transition-colors">
                       {card.label}
                     </span>
-                    <div className={cn('p-2 rounded-lg', card.bgColor)}>
-                      <Icon className={cn('w-4 h-4', card.color)} />
+                    <div className={cn('p-2.5 rounded-xl transition-transform duration-300 group-hover:scale-110 shadow-sm', card.bgColor)}>
+                      <Icon className={cn('w-5 h-5', card.color)} />
                     </div>
                   </div>
-                  <p className="text-2xl font-bold text-gray-900 dark:text-white">
+                  <p className="text-3xl font-black text-slate-900 dark:text-white tracking-tight mt-2">
                     {card.value.toLocaleString()}
                   </p>
                   <p className={cn(
@@ -257,25 +260,30 @@ export default function DashboardOverviewPage() {
         {signupsLoading ? (
           <TableSkeleton />
         ) : (
-          <div className="bg-white dark:bg-gray-800 rounded-xl border border-gray-200 dark:border-gray-700 p-6">
-            <h3 className="text-sm font-semibold text-gray-900 dark:text-white mb-4">
-              Recent Signups
+          <div className="glass-panel rounded-xl p-6 flex flex-col h-full">
+            <h3 className="text-base font-bold text-slate-900 dark:text-white mb-5 flex items-center gap-2">
+              <Users className="w-5 h-5 text-primary-500" /> Recent Signups
             </h3>
-            <div className="space-y-3">
+            <div className="space-y-1">
               {(recentSignups ?? []).map((user) => (
                 <div
                   key={user.id}
-                  className="flex items-center justify-between py-2 border-b border-gray-100 dark:border-gray-700 last:border-0"
+                  className="flex items-center justify-between p-3 rounded-lg hover:bg-slate-100/50 dark:hover:bg-slate-800/50 transition-colors group"
                 >
-                  <div>
-                    <p className="text-sm font-medium text-gray-900 dark:text-white">
-                      {user.anonymous_username}
-                    </p>
-                    <p className="text-xs text-gray-500 dark:text-gray-400">
-                      {new Date(user.created_at).toLocaleDateString()}
-                    </p>
+                  <div className="flex items-center gap-3">
+                    <div className="w-8 h-8 rounded-full bg-gradient-to-br from-primary-400 to-purple-500 flex items-center justify-center text-white font-bold text-xs shadow-sm">
+                      {user.anonymous_username.substring(0, 2).toUpperCase()}
+                    </div>
+                    <div>
+                      <p className="text-sm font-semibold text-slate-900 dark:text-white group-hover:text-primary-600 dark:group-hover:text-primary-400 transition-colors">
+                        {user.anonymous_username}
+                      </p>
+                      <p className="text-xs text-slate-500 dark:text-slate-400">
+                        {new Date(user.created_at).toLocaleDateString(undefined, { month: 'short', day: 'numeric', year: 'numeric' })}
+                      </p>
+                    </div>
                   </div>
-                  <span className="text-xs font-medium text-gray-600 dark:text-gray-400 bg-gray-100 dark:bg-gray-700 px-2 py-1 rounded">
+                  <span className="text-xs font-bold text-slate-700 dark:text-slate-300 bg-white/50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 px-2.5 py-1 rounded-full shadow-sm">
                     Score: {user.trust_score}
                   </span>
                 </div>
@@ -293,30 +301,30 @@ export default function DashboardOverviewPage() {
         {skillsLoading ? (
           <TableSkeleton />
         ) : (
-          <div className="bg-white dark:bg-gray-800 rounded-xl border border-gray-200 dark:border-gray-700 p-6">
-            <h3 className="text-sm font-semibold text-gray-900 dark:text-white mb-4">
-              Trending Skills
+          <div className="glass-panel rounded-xl p-6 flex flex-col h-full">
+            <h3 className="text-base font-bold text-slate-900 dark:text-white mb-5 flex items-center gap-2">
+              <TrendingUp className="w-5 h-5 text-purple-500" /> Trending Skills
             </h3>
-            <div className="space-y-3">
+            <div className="space-y-1">
               {(trendingSkills ?? []).map((skill, index) => (
                 <div
                   key={skill.id}
-                  className="flex items-center justify-between py-2 border-b border-gray-100 dark:border-gray-700 last:border-0"
+                  className="flex items-center justify-between p-3 rounded-lg hover:bg-slate-100/50 dark:hover:bg-slate-800/50 transition-colors group"
                 >
-                  <div className="flex items-center gap-3">
-                    <span className="text-xs font-bold text-gray-400 dark:text-gray-500 w-5">
-                      #{index + 1}
+                  <div className="flex items-center gap-4">
+                    <span className="flex items-center justify-center w-6 h-6 rounded-md bg-slate-200/50 dark:bg-slate-800 text-xs font-black text-slate-500 dark:text-slate-400 group-hover:bg-primary-100 dark:group-hover:bg-primary-900/30 group-hover:text-primary-600 dark:group-hover:text-primary-400 transition-colors">
+                      {index + 1}
                     </span>
                     <div>
-                      <p className="text-sm font-medium text-gray-900 dark:text-white">
+                      <p className="text-sm font-semibold text-slate-900 dark:text-white group-hover:text-purple-600 dark:group-hover:text-purple-400 transition-colors">
                         {skill.name}
                       </p>
-                      <p className="text-xs text-gray-500 dark:text-gray-400">
+                      <p className="text-xs text-slate-500 dark:text-slate-400">
                         {skill.category}
                       </p>
                     </div>
                   </div>
-                  <span className="text-xs font-medium text-primary-600 dark:text-primary-400">
+                  <span className="text-xs font-bold text-primary-600 dark:text-primary-400 bg-primary-50 dark:bg-primary-900/20 px-2.5 py-1 rounded-full">
                     {skill.user_count} users
                   </span>
                 </div>
