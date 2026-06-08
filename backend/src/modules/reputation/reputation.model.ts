@@ -57,7 +57,7 @@ export async function getEventsByUserId(
     take: limit,
   });
 
-  return events.map(e => ({
+  return events.map((e: any) => ({
     id: e.id,
     user_id: e.user_id,
     event_type: e.event_type,

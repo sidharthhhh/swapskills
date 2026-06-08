@@ -70,7 +70,7 @@ export async function findComplementaryUsers(
   });
 
   const excludedUserIds = new Set<number>();
-  blocks.forEach(b => {
+  blocks.forEach((b: any) => {
     if (b.blocker_id === userId) excludedUserIds.add(b.blocked_id);
     if (b.blocked_id === userId) excludedUserIds.add(b.blocker_id);
   });
@@ -245,7 +245,7 @@ export async function createMatchWithChatRoom(
   skillATeachesB: number,
   skillBTeachesA: number
 ): Promise<number> {
-  const match = await prisma.$transaction(async (tx) => {
+  const match = await prisma.$transaction(async (tx: any) => {
     const newMatch = await tx.match.create({
       data: {
         user_a_id: userAId,
@@ -388,7 +388,7 @@ export async function getUserTeachSkillIds(userId: number): Promise<number[]> {
     where: { user_id: userId },
     select: { skill_id: true }
   });
-  return rows.map((r) => r.skill_id);
+  return rows.map((r: any) => r.skill_id);
 }
 
 export async function getUserLearnSkillIds(userId: number): Promise<number[]> {
@@ -396,5 +396,5 @@ export async function getUserLearnSkillIds(userId: number): Promise<number[]> {
     where: { user_id: userId },
     select: { skill_id: true }
   });
-  return rows.map((r) => r.skill_id);
+  return rows.map((r: any) => r.skill_id);
 }

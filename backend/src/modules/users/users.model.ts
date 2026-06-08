@@ -108,7 +108,7 @@ export async function getTeachSkills(userId: number): Promise<UserSkillRow[]> {
     where: { user_id: userId },
     include: { skill: true }
   });
-  return skills.map(s => ({
+  return skills.map((s: any) => ({
     skill_id: s.skill_id,
     skill_name: s.skill.name,
     category: s.skill.category
@@ -120,7 +120,7 @@ export async function getLearnSkills(userId: number): Promise<UserSkillRow[]> {
     where: { user_id: userId },
     include: { skill: true }
   });
-  return skills.map(s => ({
+  return skills.map((s: any) => ({
     skill_id: s.skill_id,
     skill_name: s.skill.name,
     category: s.skill.category
@@ -262,7 +262,7 @@ export async function searchUsers(searchTerm: string): Promise<SearchUserRow[]> 
     take: 20
   });
 
-  return users.map(u => ({
+  return users.map((u: any) => ({
     uid: u.uid,
     username: u.username,
     trust_score: Number(u.trust_score),

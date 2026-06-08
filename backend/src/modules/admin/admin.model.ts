@@ -96,7 +96,7 @@ export async function getUsers(filters: UserListFilters) {
     }),
   ]);
 
-  return { users: users.map(user => ({ ...user, trust_score: Number(user.trust_score) })), total, page, limit };
+  return { users: users.map((user: any) => ({ ...user, trust_score: Number(user.trust_score) })), total, page, limit };
 }
 
 export async function getUserById(userId: number) {
@@ -173,9 +173,9 @@ export async function getMatches(filters: MatchListFilters) {
     where: { id: { in: Array.from(skillIds) } },
     select: { id: true, name: true }
   });
-  const skillMap = new Map(skills.map(skill => [skill.id, skill.name]));
+  const skillMap = new Map(skills.map((skill: any) => [skill.id, skill.name]));
 
-  const mappedMatches = matches.map(entry => ({
+  const mappedMatches = matches.map((entry: any) => ({
     ...entry,
     user1_username: entry.userA.username,
     user2_username: entry.userB.username,
@@ -200,7 +200,7 @@ export async function getMatchById(matchId: number) {
     where: { id: { in: [match.skill_a_teaches_b, match.skill_b_teaches_a] } },
     select: { id: true, name: true }
   });
-  const skillMap = new Map(skills.map(skill => [skill.id, skill.name]));
+  const skillMap = new Map(skills.map((skill: any) => [skill.id, skill.name]));
 
   return {
     ...match,
@@ -327,21 +327,21 @@ export async function getSkillsAnalytics() {
     },
   });
 
-  return skills.map(skill => ({
+  return skills.map((skill: any) => ({
     id: skill.id,
     name: skill.name,
     category: skill.category,
     supply: skill._count.teachSkills,
     demand: skill._count.learnSkills,
-  })).sort((first, second) => second.demand - first.demand);
+  })).sort((first: any, second: any) => second.demand - first.demand);
 }
 
 export async function getTrendingSkills() {
   const skills = await getSkillsAnalytics();
   return skills
-    .map(skill => ({ ...skill, activity_count: skill.supply + skill.demand }))
-    .filter(skill => skill.activity_count > 0)
-    .sort((first, second) => second.activity_count - first.activity_count)
+    .map((skill: any) => ({ ...skill, activity_count: skill.supply + skill.demand }))
+    .filter((skill: any) => skill.activity_count > 0)
+    .sort((first: any, second: any) => second.activity_count - first.activity_count)
     .slice(0, 20);
 }
 
@@ -353,7 +353,7 @@ export async function getReputationOutliers() {
     where: { trust_score: { lt: 50 } },
     orderBy: { trust_score: 'asc' },
   });
-  return users.map(user => ({ ...user, trust_score: Number(user.trust_score) }));
+  return users.map((user: any) => ({ ...user, trust_score: Number(user.trust_score) }));
 }
 
 // ─── Audit Log ────────────────────────────────────────────────────────────────
@@ -392,7 +392,7 @@ export async function getAuditLog(filters: AuditLogFilters) {
     }),
   ]);
 
-  return { entries: entries.map(entry => ({ ...entry, id: Number(entry.id) })), total, page, limit };
+  return { entries: entries.map((entry: any) => ({ ...entry, id: Number(entry.id) })), total, page, limit };
 }
 
 export async function recordAuditLog(

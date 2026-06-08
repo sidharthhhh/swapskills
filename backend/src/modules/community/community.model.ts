@@ -71,7 +71,7 @@ export async function findPostsByCommunity(
       where: { blocker_id: userId },
       select: { blocked_id: true }
     });
-    const blockedIds = blockedUsers.map(b => b.blocked_id);
+    const blockedIds = blockedUsers.map((b: any) => b.blocked_id);
     if (blockedIds.length > 0) {
       whereClause.author_id = { notIn: blockedIds };
     }
@@ -85,7 +85,7 @@ export async function findPostsByCommunity(
     take: limit,
   });
 
-  return posts.map(p => ({
+  return posts.map((p: any) => ({
     id: p.id,
     community_id: p.community_id,
     author_id: p.author_id,
@@ -111,7 +111,7 @@ export async function countPostsByCommunity(
       where: { blocker_id: userId },
       select: { blocked_id: true }
     });
-    const blockedIds = blockedUsers.map(b => b.blocked_id);
+    const blockedIds = blockedUsers.map((b: any) => b.blocked_id);
     if (blockedIds.length > 0) {
       whereClause.author_id = { notIn: blockedIds };
     }
@@ -204,7 +204,7 @@ export async function findCommentsByPost(
       where: { blocker_id: userId },
       select: { blocked_id: true }
     });
-    const blockedIds = blockedUsers.map(b => b.blocked_id);
+    const blockedIds = blockedUsers.map((b: any) => b.blocked_id);
     if (blockedIds.length > 0) {
       whereClause.author_id = { notIn: blockedIds };
     }
@@ -216,7 +216,7 @@ export async function findCommentsByPost(
     orderBy: { created_at: 'asc' }
   });
 
-  return comments.map(c => ({
+  return comments.map((c: any) => ({
     id: c.id,
     post_id: c.post_id,
     author_id: c.author_id,
@@ -287,7 +287,7 @@ export async function findTrendingPosts(): Promise<PostRow[]> {
     take: 10,
   });
 
-  return posts.map(p => ({
+  return posts.map((p: any) => ({
     id: p.id,
     community_id: p.community_id,
     author_id: p.author_id,

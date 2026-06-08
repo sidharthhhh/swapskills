@@ -80,7 +80,7 @@ export async function getSessionsByMatchId(matchId: number): Promise<SessionRow[
     orderBy: { scheduled_at: 'desc' }
   });
 
-  return sessions.map(s => ({
+  return sessions.map((s: any) => ({
     id: s.id,
     match_id: s.match_id,
     teacher_id: s.teacher_id,
@@ -148,7 +148,7 @@ export async function getNotesBySessionId(sessionId: number): Promise<SessionNot
     orderBy: { created_at: 'asc' }
   });
 
-  return notes.map(n => ({
+  return notes.map((n: any) => ({
     id: n.id,
     session_id: n.session_id,
     user_id: n.user_id,

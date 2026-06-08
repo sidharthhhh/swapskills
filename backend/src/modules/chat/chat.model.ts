@@ -78,7 +78,7 @@ export async function getRoomsForUser(userId: number): Promise<ChatRoomRow[]> {
     }
   });
 
-  const result = rooms.map(cr => {
+  const result = rooms.map((cr: any) => {
     const isUserA = cr.match.user_a_id === userId;
     const partner = isUserA ? cr.match.userB : cr.match.userA;
     const lastMessage = cr.messages[0];
@@ -95,7 +95,7 @@ export async function getRoomsForUser(userId: number): Promise<ChatRoomRow[]> {
     };
   });
 
-  result.sort((a, b) => {
+  result.sort((a: any, b: any) => {
     const aTime = a.last_message_at ? a.last_message_at.getTime() : a.created_at.getTime();
     const bTime = b.last_message_at ? b.last_message_at.getTime() : b.created_at.getTime();
     return bTime - aTime;
@@ -142,7 +142,7 @@ export async function getMessagesForRoom(
     }
   });
 
-  return msgs.map(msg => ({
+  return msgs.map((msg: any) => ({
     id: msg.id,
     room_id: msg.room_id,
     sender_id: msg.sender_id,
@@ -293,8 +293,8 @@ export async function getReactions(messageId: number) {
     include: { user: { select: { username: true } } }
   });
 
-  return grouped.map(g => {
-    const emojiUsers = users.filter(u => u.emoji === g.emoji).map(u => u.user.username);
+  return grouped.map((g: any) => {
+    const emojiUsers = users.filter((u: any) => u.emoji === g.emoji).map((u: any) => u.user.username);
     return {
       emoji: g.emoji,
       count: g._count,
@@ -317,8 +317,8 @@ export async function getReactionsForMessages(messageIds: number[]) {
     include: { user: { select: { username: true } } }
   });
 
-  return grouped.map(g => {
-    const emojiUsers = users.filter(u => u.message_id === g.message_id && u.emoji === g.emoji).map(u => u.user.username);
+  return grouped.map((g: any) => {
+    const emojiUsers = users.filter((u: any) => u.message_id === g.message_id && u.emoji === g.emoji).map((u: any) => u.user.username);
     return {
       message_id: g.message_id,
       emoji: g.emoji,
