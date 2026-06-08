@@ -1,10 +1,12 @@
+import 'package:flutter_dotenv/flutter_dotenv.dart';
+
 /// Application-wide constants for the SwapSkills app.
 class AppConstants {
   AppConstants._();
 
   /// Base URL for the backend API.
   /// Use localhost for web/desktop, 10.0.2.2 for Android emulator.
-  static const String apiBaseUrl = 'http://localhost:3000';
+  static String get apiBaseUrl => dotenv.env['BACKEND_API_URL'] ?? 'http://localhost:3000';
 
   /// Socket.IO chat namespace path.
   static const String socketChatNamespace = '/chat';
